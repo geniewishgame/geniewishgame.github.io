@@ -36,7 +36,7 @@
             display: block;
             width: 100%;
             height: auto; /* Maintain aspect ratio */
-            background: url("https://placehold.co/400x600/1E3A8A/ffffff?text=Deep+Blue+Sky") no-repeat center center; /* Placeholder background */
+            background: url("https://placehold.co/400x600/1E3A8A/ffffff") no-repeat center center; /* Placeholder background */
             background-size: cover;
         }
 
@@ -104,12 +104,25 @@
             text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
             z-index: 5;
         }
+
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc; /* Lighter indigo */
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .home-link:hover {
+            color: #c7d2fe; /* Even lighter */
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
 
     <h1 class="text-3xl font-bold mb-4 text-center">The Grumpy Genie's Ascent</h1>
-    <p class="text-lg text-gray-400 mb-6 text-center">Click or tap to make the genie puff up!</p>
+    <p class="text-lg text-gray-400 mb-6 text-center">This page does not seem to exist. To get out of here, tap to puff up the genie. Or else, you will be stuck in this prison.</p>
 
     <div class="game-container">
         <div id="score-display">Score: 0</div>
@@ -121,6 +134,10 @@
             <button id="start-button" class="btn-start">Start Game</button>
         </div>
     </div>
+
+    <a href="https://themastercoder-exe.github.io" class="home-link">
+        &larr; Return to the main page
+    </a>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -321,7 +338,7 @@
         function gameOver() {
             gameActive = false;
             overlayTitle.textContent = "GAME OVER";
-            overlayMessage.innerHTML = `Your escape failed! Final Score: <span style="color:#FBBF24; font-weight:bold;">${score}</span><br> The bottle keeps you, genie.`;
+            overlayMessage.innerHTML = `Your escape failed! Final Score: <span style="color:#FBBF24; font-weight:bold;">${score}</span><br> The bottle keeps you, miserable genie.`;
             startButton.textContent = "Try Again";
             overlay.style.display = 'flex';
         }
