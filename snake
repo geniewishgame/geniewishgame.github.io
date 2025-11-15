@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genie's Greed: A Snake Game</title>
+    <style>
+        /* General Body and Font Setup */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #111827; /* Dark background */
+            font-family: 'Arial', sans-serif;
+            color: #E0E7FF; /* Light purple-blue text */
+            user-select: none; /* Prevent selection during play */
+            padding: 20px;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            border: 8px solid #4F46E5; /* Indigo border */
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5), 0 0 15px rgba(255, 255, 255, 0.1);
+            position: relative;
+            background-color: #0F172A; /* Navy */
+            max-width: 520px; /* 500px + 20px padding */
+            width: 100%;
+            padding: 10px;
+        }
+
+        /* Canvas Styles */
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: auto; /* Maintain aspect ratio */
+            background-color: #1E3A8A; /* Deep blue */
+            border-radius: 4px;
+        }
+
+        /* Game Over/Start Overlay */
+        #overlay {
+            position: absolute;
+            top: 10px;    /* Account for container padding */
+            left: 10px;   /* Account for container padding */
+            right: 10px;  /* Account for container padding */
+            bottom: 10px; /* Account for container padding */
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(3px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 4px;
+            z-index: 10;
+            padding: 20px;
+        }
+        
+        #overlay h2 {
+            font-size: 2.5rem;
+            color: #FBBF24; /* Amber/Gold color */
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+        }
+
+        #overlay p {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .btn-start {
+            background-color: #4F46E5; /* Indigo */
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6);
+        }
+
+        .btn-start:hover {
+            background-color: #6366F1;
+            transform: translateY(-2px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        /* Score Display */
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #FBBF24; /* Amber/Gold */
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+            z-index: 5;
+        }
+
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc; /* Lighter indigo */
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .home-link:hover {
+            color: #c7d2fe; /* Even lighter */
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-3xl font-bold mb-4 text-center">Genie's Greed</h1>
+    <p class="text-lg text-gray-400 mb-6 text-center">Use Arrow Keys to collect the cursed gold!</p>
+
+    <div class="game-container">
+        <div id="score-display">Score: 0</div>
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div id="overlay">
+            <h2 id="overlay-title">Genie's Greed</h2>
+            <p id="overlay-message">Collect the gold, but don't touch your own tail or the walls! <br> Use the Arrow Keys to move.</p>
+            <button id="start-button" class="btn-start">Start Game</button>
+        </div>
+    </div>
+
+    <a href="https://themastercoder-exe.github.io" class="home-link">
+        &larr; Return to the main page
+    </a>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const startButton = document.getElementById('start-button');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMessage = document.getElementById('overlay-message');
+        const scoreDisplay = document.getElementById('score-display');
+
+        // --- Game Constants ---
+        const TILE_SIZE = 20;
+        const GRID_WIDTH = canvas.width / TILE_SIZE;
+        const GRID_HEIGHT = canvas.height / TILE_SIZE;
+        const GAME_SPEED = 120; // Milliseconds per update
+
+        // --- Game State ---
+        let gameActive = false;
+        let score = 0;
+        let snake = [];
+        let food = {};
+        let direction = 'right';
+        let newDirection = 'right';
+        let gameLoopTimeout;
+
+        // --- Colors ---
+        const SNAKE_COLOR = '#8B5CF6'; // Purple
+        const SNAKE_HEAD_COLOR = '#a5b4fc'; // Lighter purple
+        const FOOD_COLOR = '#FBBF24'; // Gold
+        const BG_COLOR = '#1E3A8A'; // Deep Blue
+
+        // --- Game Functions ---
+
+        /**
+         * Resets and initializes the game state
+         */
+        function resetGame() {
+            gameActive = true;
+            score = 0;
+            scoreDisplay.textContent = `Score: ${score}`;
+            
+            // Initial snake position
+            snake = [
+                { x: 10, y: 10 },
+                { x: 9, y: 10 },
+                { x: 8, y: 10 }
+            ];
+            
+            direction = 'right';
+            newDirection = 'right';
+            
+            spawnFood();
+            
+            overlay.style.display = 'none';
+        }
+
+        /**
+         * Draws a single tile on the canvas
+         */
+        function drawTile(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        /**
+         * Draws the entire snake
+         */
+        function drawSnake() {
+            for (let i = 0; i < snake.length; i++) {
+                drawTile(snake[i].x, snake[i].y, i === 0 ? SNAKE_HEAD_COLOR : SNAKE_COLOR);
+            }
+        }
+
+        /**
+         * Draws the food
+         */
+        function drawFood() {
+            drawTile(food.x, food.y, FOOD_COLOR);
+        }
+
+        /**
+         * Spawns food in a random location not occupied by the snake
+         */
+        function spawnFood() {
+            let onSnake;
+            do {
+                onSnake = false;
+                food = {
+                    x: Math.floor(Math.random() * GRID_WIDTH),
+                    y: Math.floor(Math.random() * GRID_HEIGHT)
+                };
+                // Check if the food spawned on the snake
+                for (const segment of snake) {
+                    if (segment.x === food.x && segment.y === food.y) {
+                        onSnake = true;
+                        break;
+                    }
+                }
+            } while (onSnake);
+        }
+
+        /**
+         * Moves the snake by one tile
+         */
+        function moveSnake() {
+            direction = newDirection;
+            
+            const head = { ...snake[0] }; // Copy the head
+
+            // Determine new head position
+            switch (direction) {
+                case 'up':
+                    head.y--;
+                    break;
+                case 'down':
+                    head.y++;
+                    break;
+                case 'left':
+                    head.x--;
+                    break;
+                case 'right':
+                    head.x++;
+                    break;
+            }
+
+            // Add new head
+            snake.unshift(head);
+
+            // Check for food collision
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                scoreDisplay.textContent = `Score: ${score}`;
+                spawnFood();
+            } else {
+                // Remove tail if no food was eaten
+                snake.pop();
+            }
+        }
+
+        /**
+         * Checks for all game-ending collision types
+         * @returns {boolean} True if a collision occurred
+         */
+        function checkCollision() {
+            const head = snake[0];
+
+            // Wall collision
+            if (head.x < 0 || head.x >= GRID_WIDTH || head.y < 0 || head.y >= GRID_HEIGHT) {
+                return true;
+            }
+
+            // Self-collision
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /**
+         * Main game loop
+         */
+        function gameLoop() {
+            if (!gameActive) {
+                clearTimeout(gameLoopTimeout);
+                return;
+            }
+
+            // 1. Clear canvas
+            ctx.fillStyle = BG_COLOR;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Move snake
+            moveSnake();
+
+            // 3. Check for game over
+            if (checkCollision()) {
+                gameOver();
+                return;
+            }
+
+            // 4. Draw elements
+            drawFood();
+            drawSnake();
+
+            // 5. Schedule next loop
+            gameLoopTimeout = setTimeout(gameLoop, GAME_SPEED);
+        }
+
+        /**
+         * Ends the game and displays the final score
+         */
+        function gameOver() {
+            gameActive = false;
+            overlayTitle.textContent = "GAME OVER";
+            overlayMessage.innerHTML = `Consumed by your own greed! Final Score: <span style="color:#FBBF24; font-weight:bold;">${score}</span><br> The genie's tail devours itself.`;
+            startButton.textContent = "Try Again";
+            overlay.style.display = 'flex';
+        }
+
+        // --- Event Handlers ---
+
+        /**
+         * Handles keyboard input for changing direction
+         */
+        function handleKeydown(e) {
+            if (!gameActive && overlay.style.display !== 'none') {
+                // Start game on any arrow key if on start screen
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                    e.preventDefault();
+                    startGame();
+                }
+                return;
+            }
+
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (direction !== 'down') newDirection = 'up';
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                    if (direction !== 'up') newDirection = 'down';
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                    if (direction !== 'right') newDirection = 'left';
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                    if (direction !== 'left') newDirection = 'right';
+                    e.preventDefault();
+                    break;
+            }
+        }
+
+        /**
+         * Starts the game from the button
+         */
+        function startGame() {
+            resetGame();
+            gameLoop();
+        }
+
+        // Start game button
+        startButton.addEventListener('click', startGame);
+
+        // Keyboard input for direction
+        document.addEventListener('keydown', handleKeydown);
+
+    </script>
+</body>
+</html>
