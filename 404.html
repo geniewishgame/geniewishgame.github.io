@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Wish Game: Grumpy Genie's Ascent</title>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* General Body and Font Setup */
         body {
@@ -13,49 +15,75 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background-color: #111827; /* Dark background */
-            font-family: 'Arial', sans-serif;
-            color: #E0E7FF; /* Light purple-blue text */
+            background-color: #111827; /* Dark background (gray-900) */
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+            color: #E0E7FF; /* Light purple-blue text (indigo-200) */
             user-select: none; /* Prevent selection during play */
             padding: 20px;
         }
 
+        /* Page Header */
+        h1 {
+            font-size: 2.25rem; /* text-3xl */
+            font-weight: 700; /* font-bold */
+            margin-bottom: 1rem; /* mb-4 */
+            text-align: center;
+            color: #a5b4fc; /* indigo-300 */
+        }
+        
+        .subtitle {
+            font-size: 1.125rem; /* text-lg */
+            color: #9CA3AF; /* text-gray-400 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            text-align: center;
+        }
+
         /* Main Game Container */
         .game-container {
-            border: 8px solid #4F46E5; /* Indigo border */
+            /* Use indigo-500/30 border */
+            border: 1px solid rgba(99, 102, 241, 0.3);
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5), 0 0 15px rgba(255, 255, 255, 0.1);
             position: relative;
-            background: linear-gradient(to top, #1E3A8A, #0F172A); /* Deep blue to navy gradient */
-            max-width: 480px; /* Limit width on desktop */
-            width: 100%;
+            background-color: #1F2937; /* gray-800 */
+            width: 448px; /* 400px canvas + 2*24px padding */
+            max-width: 100%;
+            padding: 24px; /* p-6 */
+            box-sizing: border-box; /* Include padding in width calculation */
         }
 
         /* Canvas Styles */
         #gameCanvas {
             display: block;
-            width: 100%;
-            height: auto; /* Maintain aspect ratio */
-            background-color: #1E3A8A; no-repeat center center; /* Placeholder background */
-            background-size: cover;
+            width: 400px;
+            height: 600px;
+            max-width: 100%;
+            height: auto;
+            aspect-ratio: 400 / 600;
+            border-radius: 8px; /* Rounded corners */
         }
 
         /* Game Over/Start Overlay */
         #overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
+            /* Position relative to padding */
+            top: 24px;
+            left: 24px;
+            right: 24px;
+            bottom: 24px;
+            width: auto;
+            height: auto;
+            background: rgba(31, 41, 55, 0.8); /* gray-800/80 */
+            backdrop-filter: blur(3px);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             text-align: center;
-            border-radius: 10px;
+            border-radius: 8px; /* Match canvas */
             z-index: 10;
             padding: 20px;
+            box-sizing: border-box;
         }
         
         #overlay h2 {
@@ -71,7 +99,7 @@
         }
 
         .btn-start {
-            background-color: #4F46E5; /* Indigo */
+            background-color: #4F46E5; /* Indigo (indigo-600) */
             color: white;
             padding: 12px 24px;
             font-size: 1.25rem;
@@ -84,7 +112,7 @@
         }
 
         .btn-start:hover {
-            background-color: #6366F1;
+            background-color: #6366F1; /* indigo-500 */
             transform: translateY(-2px);
         }
 
@@ -95,8 +123,11 @@
         /* Score Display */
         #score-display {
             position: absolute;
-            top: 10px;
-            width: 100%;
+            /* Adjust for padding */
+            top: calc(24px + 10px); /* 34px */
+            left: 24px;
+            right: 24px;
+            width: auto;
             text-align: center;
             font-size: 2.5rem;
             font-weight: bold;
@@ -121,8 +152,8 @@
 </head>
 <body>
 
-    <h1 class="text-3xl font-bold mb-4 text-center">404: Genie not found </h1>
-    <p class="text-lg text-gray-400 mb-6 text-center">This page does not seem to exist. To get out of here, tap to puff up the genie. Or else, you will be stuck in this lamp forever</p>
+    <h1>404: Genie not found</h1>
+    <p class="subtitle">This page does not seem to exist. To get out of here, tap to puff up the genie. Or else, you will be stuck in this lamp forever</p>
 
     <div class="game-container">
         <div id="score-display">Score: 0</div>
@@ -154,7 +185,7 @@
         const OBSTACLE_SPEED = 4;
         const OBSTACLE_WIDTH = 52;
         const OBSTACLE_GAP_HEIGHT = 160;
-        const PIPE_SPACING = 280; // Horizontal distance between pipes (was 200)
+        const PIPE_SPACING = 280; // Horizontal distance between pipes
 
         // --- Game State ---
         let gameActive = false;
@@ -376,28 +407,6 @@
                 }
             }
         });
-
-        // Handle window resizing to keep canvas aspect ratio consistent hfowehfioweh
-        function resizeCanvas() {
-            const container = canvas.closest('.game-container');
-            if (container) {
-                // Maintain a 4:6 aspect ratio
-                const containerWidth = container.clientWidth;
-                canvas.width = containerWidth;
-                canvas.height = containerWidth * 1.5; 
-                
-                // Recalculate genie position if needed, or simply re-draw
-                genie.x = 50;
-            }
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-
-        // Initial setup on load
-        window.onload = function() {
-            resizeCanvas(); 
-            // The overlay will handle the initial view and start
-        };
 
     </script>
 </body>
