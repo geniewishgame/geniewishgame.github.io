@@ -1,0 +1,413 @@
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Wish Game: Grumpy Genie's Ascent</title>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* General Body and Font Setup */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #111827; /* Dark background (gray-900) */
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+            color: #E0E7FF; /* Light purple-blue text (indigo-200) */
+            user-select: none; /* Prevent selection during play */
+            padding: 20px;
+        }
+
+        /* Page Header */
+        h1 {
+            font-size: 2.25rem; /* text-3xl */
+            font-weight: 700; /* font-bold */
+            margin-bottom: 1rem; /* mb-4 */
+            text-align: center;
+            color: #a5b4fc; /* indigo-300 */
+        }
+        
+        .subtitle {
+            font-size: 1.125rem; /* text-lg */
+            color: #9CA3AF; /* text-gray-400 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            text-align: center;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            /* Use indigo-500/30 border */
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5), 0 0 15px rgba(255, 255, 255, 0.1);
+            position: relative;
+            background-color: #1F2937; /* gray-800 */
+            width: 448px; /* 400px canvas + 2*24px padding */
+            max-width: 100%;
+            padding: 24px; /* p-6 */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+
+        /* Canvas Styles */
+        #gameCanvas {
+            display: block;
+            width: 400px;
+            height: 600px;
+            max-width: 100%;
+            height: auto;
+            aspect-ratio: 400 / 600;
+            border-radius: 8px; /* Rounded corners */
+        }
+
+        /* Game Over/Start Overlay */
+        #overlay {
+            position: absolute;
+            /* Position relative to padding */
+            top: 24px;
+            left: 24px;
+            right: 24px;
+            bottom: 24px;
+            width: auto;
+            height: auto;
+            background: rgba(31, 41, 55, 0.8); /* gray-800/80 */
+            backdrop-filter: blur(3px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 8px; /* Match canvas */
+            z-index: 10;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        #overlay h2 {
+            font-size: 2.5rem;
+            color: #FBBF24; /* Amber/Gold-ish color */
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+        }
+
+        #overlay p {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .btn-start {
+            background-color: #4F46E5; /* Indigo (indigo-600) */
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6);
+        }
+
+        .btn-start:hover {
+            background-color: #6366F1; /* indigo-500 */
+            transform: translateY(-2px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        /* Score Display */
+        #score-display {
+            position: absolute;
+            /* Adjust for padding */
+            top: calc(24px + 10px); /* 34px */
+            left: 24px;
+            right: 24px;
+            width: auto;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #FBBF24; /* Amber/Gold */
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+            z-index: 5;
+        }
+
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc; /* Lighter indigo */
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .home-link:hover {
+            color: #c7d2fe; /* Even lighter */
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Flappy Bird</h1>
+    <p class="subtitle">Click or press spacebar to puff up the genie. Do not let it touch the ground or a gold rod. Note: this is the same blappy fird as the 404 page.</p>
+
+    <div class="game-container">
+        <div id="score-display">Score: 0</div>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        
+        <div id="overlay">
+            <h2 id="overlay-title">Flappy Genie</h2>
+            <p id="overlay-message">Dodge the cursed lamps and escape the bottle! <br>Click/Tap to make the genie fly.</p>
+            <button id="start-button" class="btn-start">Start Game</button>
+        </div>
+    </div>
+
+    <a href="https://themastercoder-exe.github.io" class="home-link">
+        &larr; Return to the main page
+    </a>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const startButton = document.getElementById('start-button');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMessage = document.getElementById('overlay-message');
+        const scoreDisplay = document.getElementById('score-display');
+
+        // --- Game Constants ---
+        const GRAVITY = 0.6;
+        const JUMP_VELOCITY = -10;
+        const OBSTACLE_SPEED = 4;
+        const OBSTACLE_WIDTH = 52;
+        const OBSTACLE_GAP_HEIGHT = 160;
+        const PIPE_SPACING = 280; // Horizontal distance between pipes
+
+        // --- Game State ---
+        let gameActive = false;
+        let score = 0;
+        let animationFrameId;
+
+        // --- Genie Object ---
+        const genie = {
+            x: 50,
+            y: canvas.height / 2,
+            radius: 20,
+            velocity: 0,
+            color: '#8B5CF6', // Purple
+            draw: function() {
+                // Body (smoky, rounded shape)
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Simple Face (Eyes)
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(this.x - 7, this.y - 5, 3, 0, Math.PI * 2);
+                ctx.arc(this.x + 7, this.y - 5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Pupils (Grumpy look)
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(this.x - 7, this.y - 5, 1, 0, Math.PI * 2);
+                ctx.arc(this.x + 7, this.y - 5, 1, 0, Math.PI * 2);
+                ctx.fill();
+
+            },
+            update: function() {
+                // Apply gravity
+                this.velocity += GRAVITY;
+                this.y += this.velocity;
+
+                // Keep genie within vertical bounds (optional: fail if hitting bottom)
+                if (this.y + this.radius > canvas.height) {
+                    this.y = canvas.height - this.radius;
+                    this.velocity = 0;
+                    if (gameActive) gameOver();
+                }
+                if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.velocity = 0;
+                }
+            },
+            jump: function() {
+                // Reverse velocity to move upwards
+                this.velocity = JUMP_VELOCITY;
+            }
+        };
+
+        // --- Obstacle/Pipe Class ---
+        class Obstacle {
+            constructor(x) {
+                this.x = x;
+                this.width = OBSTACLE_WIDTH;
+                this.gapHeight = OBSTACLE_GAP_HEIGHT;
+                // Random Y position for the gap center
+                this.gapYCenter = Math.random() * (canvas.height - this.gapHeight * 2) + this.gapHeight;
+                this.scored = false;
+            }
+
+            draw() {
+                ctx.fillStyle = '#FBBF24'; // Gold/Amber for cursed lamps
+
+                // Top Obstacle (stack of lamps)
+                ctx.fillRect(this.x, 0, this.width, this.gapYCenter - this.gapHeight / 2);
+                // Bottom Obstacle (stack of lamps)
+                ctx.fillRect(this.x, this.gapYCenter + this.gapHeight / 2, this.width, canvas.height - (this.gapYCenter + this.gapHeight / 2));
+            }
+
+            update() {
+                this.x -= OBSTACLE_SPEED;
+            }
+        }
+
+        let obstacles = [];
+        let frameCount = 0;
+
+        // --- Game Functions ---
+
+        /**
+         * Resets and initializes the game state
+         */
+        function resetGame() {
+            gameActive = true;
+            score = 0;
+            scoreDisplay.textContent = `Score: ${score}`;
+            genie.y = canvas.height / 2;
+            genie.velocity = 0;
+            obstacles = [];
+            frameCount = 0;
+            overlay.style.display = 'none';
+        }
+
+        /**
+         * Checks for collision between the genie and any obstacle
+         * @returns {boolean} True if collision occurred, false otherwise
+         */
+        function checkCollision() {
+            for (const obstacle of obstacles) {
+                // Check if genie is horizontally aligned with the obstacle
+                if (genie.x + genie.radius > obstacle.x && genie.x - genie.radius < obstacle.x + obstacle.width) {
+                    
+                    // Check collision with top pipe
+                    const topEdge = obstacle.gapYCenter - obstacle.gapHeight / 2;
+                    if (genie.y - genie.radius < topEdge) {
+                        return true;
+                    }
+                    
+                    // Check collision with bottom pipe
+                    const bottomEdge = obstacle.gapYCenter + obstacle.gapHeight / 2;
+                    if (genie.y + genie.radius > bottomEdge) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Main game loop
+         */
+        function gameLoop() {
+            if (!gameActive) {
+                cancelAnimationFrame(animationFrameId);
+                return;
+            }
+
+            // Clear canvas (deep blue sky)
+            ctx.fillStyle = '#1E3A8A';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            frameCount++;
+
+            // 1. Generate new obstacles
+            if (frameCount % (PIPE_SPACING / OBSTACLE_SPEED) === 0) {
+                obstacles.push(new Obstacle(canvas.width));
+            }
+
+            // 2. Update and draw obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+                obstacle.update();
+                obstacle.draw();
+
+                // Check for scoring
+                if (obstacle.x + obstacle.width < genie.x - genie.radius && !obstacle.scored) {
+                    score++;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                    obstacle.scored = true;
+                }
+
+                // Remove off-screen pipes
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // 3. Update and draw genie
+            genie.update();
+            genie.draw();
+
+            // 4. Check for collision
+            if (checkCollision()) {
+                gameOver();
+            }
+            
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * Ends the game and displays the final score
+         */
+        function gameOver() {
+            gameActive = false;
+            overlayTitle.textContent = "GAME OVER";
+            overlayMessage.innerHTML = `Your escape failed! Final Score: <span style="color:#FBBF24; font-weight:bold;">${score}</span><br> The bottle keeps you, miserable genie.`;
+            startButton.textContent = "Try Again";
+            overlay.style.display = 'flex';
+        }
+
+        // --- Event Handlers ---
+
+        function handleInput() {
+            if (!gameActive) return;
+            genie.jump();
+        }
+
+        // Start game button
+        startButton.addEventListener('click', () => {
+            resetGame();
+            gameLoop();
+        });
+
+        // Click/Touch input for jump
+        canvas.addEventListener('click', handleInput);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling on touch
+            handleInput();
+        });
+
+        // Keyboard input for jump
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
+                e.preventDefault();
+                if (!gameActive && overlay.style.display !== 'none') {
+                    // Start the game on key press if on start screen
+                    resetGame();
+                    gameLoop();
+                } else if (gameActive) {
+                    handleInput();
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
