@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genie's Pong</title>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* General Body and Font Setup */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #111827; /* Dark background (gray-900) */
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+            color: #E0E7FF; /* Light purple-blue text (indigo-200) */
+            user-select: none; /* Prevent selection during play */
+            padding: 20px;
+        }
+
+        /* Page Header */
+        h1 {
+            font-size: 2.25rem; /* text-3xl */
+            font-weight: 700; /* font-bold */
+            margin-bottom: 1rem; /* mb-4 */
+            text-align: center;
+            color: #a5b4fc; /* indigo-300 */
+        }
+        
+        .subtitle {
+            font-size: 1.125rem; /* text-lg */
+            color: #9CA3AF; /* text-gray-400 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            text-align: center;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            /* Use indigo-500/30 border */
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5), 0 0 15px rgba(255, 255, 255, 0.1);
+            position: relative;
+            background-color: #1F2937; /* gray-800 */
+            width: 800px; /* Canvas width + padding */
+            max-width: 100%;
+            padding: 24px; /* p-6 */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+
+        /* Canvas Styles */
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 800 / 600;
+            border-radius: 8px; /* Rounded corners */
+            background-color: #1E3A8A; /* Deep blue background */
+        }
+
+        /* Game Over/Start Overlay */
+        #overlay {
+            position: absolute;
+            /* Position relative to padding */
+            top: 24px;
+            left: 24px;
+            right: 24px;
+            bottom: 24px;
+            width: auto;
+            height: auto;
+            background: rgba(31, 41, 55, 0.8); /* gray-800/80 */
+            backdrop-filter: blur(3px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 8px; /* Match canvas */
+            z-index: 10;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        #overlay h2 {
+            font-size: 2.5rem;
+            color: #FBBF24; /* Amber/Gold color */
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+        }
+
+        #overlay p {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .btn-start {
+            background-color: #4F46E5; /* Indigo (indigo-600) */
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6);
+        }
+
+        .btn-start:hover {
+            background-color: #6366F1; /* indigo-500 */
+            transform: translateY(-2px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        /* Score Display */
+        #score-display {
+            position: absolute;
+            top: calc(24px + 10px); /* 34px */
+            left: 24px;
+            right: 24px;
+            width: auto;
+            text-align: center;
+            font-size: 3rem; /* Larger score */
+            font-weight: bold;
+            color: #a5b4fc; /* indigo-300 */
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+            z-index: 5;
+        }
+
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc; /* Lighter indigo */
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .home-link:hover {
+            color: #c7d2fe; /* Even lighter */
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧞 Genie's Pong 🧞</h1>
+    <p class="subtitle">Use your mouse or finger to control the paddle. First to 5 wins!</p>
+
+    <div class="game-container">
+        <div id="score-display">0 - 0</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="overlay">
+            <h2 id="overlay-title">Genie's Pong</h2>
+            <p id="overlay-message">You dare challenge me, mortal? <br> Move your mouse or finger to play.</p>
+            <button id="start-button" class="btn-start">Start Game</button>
+        </div>
+    </div>
+
+    <a href="https://themastercoder-exe.github.io" class="home-link">
+        &larr; Return to the main page
+    </a>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const startButton = document.getElementById('start-button');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMessage = document.getElementById('overlay-message');
+        const scoreDisplay = document.getElementById('score-display');
+
+        // --- Game Constants ---
+        const PADDLE_HEIGHT = 100;
+        const PADDLE_WIDTH = 15;
+        const BALL_RADIUS = 10;
+        const WINNING_SCORE = 5;
+        const GENIE_PADDLE_SPEED = 6; // AI Speed
+
+        // --- Colors ---
+        const PLAYER_COLOR = '#a5b4fc'; // indigo-300
+        const GENIE_COLOR = '#8B5CF6';  // Purple
+        const BALL_COLOR = '#FBBF24';   // Gold
+        const NET_COLOR = 'rgba(165, 180, 252, 0.3)'; // Faint indigo-300
+
+        // --- Game Objects ---
+        let player = {
+            x: 10,
+            y: canvas.height / 2 - PADDLE_HEIGHT / 2,
+            width: PADDLE_WIDTH,
+            height: PADDLE_HEIGHT,
+            color: PLAYER_COLOR,
+            score: 0
+        };
+
+        let genie = {
+            x: canvas.width - PADDLE_WIDTH - 10,
+            y: canvas.height / 2 - PADDLE_HEIGHT / 2,
+            width: PADDLE_WIDTH,
+            height: PADDLE_HEIGHT,
+            color: GENIE_COLOR,
+            score: 0
+        };
+
+        let ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: BALL_RADIUS,
+            speed: 7,
+            velocityX: 5,
+            velocityY: 5,
+            color: BALL_COLOR
+        };
+
+        // --- Game State ---
+        let gameActive = false;
+        let animationFrameId;
+
+        // --- Drawing Functions ---
+
+        function drawRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+        }
+
+        function drawCircle(x, y, r, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2, false);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawNet() {
+            for (let i = 0; i < canvas.height; i += 25) {
+                drawRect(canvas.width / 2 - 1, i, 2, 15, NET_COLOR);
+            }
+        }
+
+        // --- Game Logic ---
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.speed = 7;
+            // Send ball towards the loser
+            ball.velocityX = (ball.velocityX > 0 ? -5 : 5);
+            ball.velocityY = (Math.random() > 0.5 ? 1 : -1) * 5; // Random Y direction
+        }
+
+        function updateScore() {
+            scoreDisplay.textContent = `${player.score} - ${genie.score}`;
+        }
+
+        function resetGame() {
+            gameActive = true;
+            player.score = 0;
+            genie.score = 0;
+            updateScore();
+            resetBall();
+            overlay.style.display = 'none';
+        }
+
+        function movePlayerPaddle(e) {
+            let rect = canvas.getBoundingClientRect();
+            let root = document.documentElement;
+            
+            // Handle both mouse and touch events
+            let clientY = e.clientY;
+            if (e.type === 'touchmove') {
+                clientY = e.touches[0].clientY;
+            }
+
+            let newY = clientY - rect.top - root.scrollTop;
+            
+            player.y = newY - player.height / 2;
+
+            // Keep paddle within canvas bounds
+            if (player.y < 0) {
+                player.y = 0;
+            }
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+            }
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            // --- Ball Movement ---
+            ball.x += ball.velocityX;
+            ball.y += ball.velocityY;
+
+            // --- Ball Collision (Top/Bottom Walls) ---
+            if (ball.y + ball.radius > canvas.height || ball.y - ball.radius < 0) {
+                ball.velocityY = -ball.velocityY;
+            }
+
+            // --- Determine which paddle is being hit ---
+            let targetPaddle = (ball.x < canvas.width / 2) ? player : genie;
+
+            // --- Paddle Collision ---
+            if (isCollision(ball, targetPaddle)) {
+                // Calculate hit position (from -0.5 to 0.5)
+                let collidePoint = (ball.y - (targetPaddle.y + targetPaddle.height / 2));
+                collidePoint = collidePoint / (targetPaddle.height / 2);
+
+                // Calculate angle in Radian
+                let angleRad = (Math.PI / 4) * collidePoint;
+
+                // Change direction and increase speed
+                let direction = (ball.x < canvas.width / 2) ? 1 : -1;
+                ball.velocityX = direction * ball.speed * Math.cos(angleRad);
+                ball.velocityY = ball.speed * Math.sin(angleRad);
+                
+                // Increase ball speed
+                ball.speed += 0.5;
+            }
+
+            // --- Scoring ---
+            if (ball.x - ball.radius < 0) {
+                // Genie scores
+                genie.score++;
+                updateScore();
+                checkWin();
+                resetBall();
+            } else if (ball.x + ball.radius > canvas.width) {
+                // Player scores
+                player.score++;
+                updateScore();
+                checkWin();
+                resetBall();
+            }
+
+            // --- Genie AI Movement ---
+            // Simple AI: tries to center its paddle on the ball's Y position
+            let targetY = ball.y;
+            let genieCenter = genie.y + genie.height / 2;
+
+            if (genieCenter < targetY - 20) { // Add a 20px threshold to prevent jitter
+                genie.y += GENIE_PADDLE_SPEED;
+            } else if (genieCenter > targetY + 20) {
+                genie.y -= GENIE_PADDLE_SPEED;
+            }
+
+            // Keep genie paddle within bounds
+            if (genie.y < 0) genie.y = 0;
+            if (genie.y + genie.height > canvas.height) genie.y = canvas.height - genie.height;
+        }
+
+        function isCollision(b, p) {
+            // Ball's top, bottom, left, right edges
+            let bTop = b.y - b.radius;
+            let bBottom = b.y + b.radius;
+            let bLeft = b.x - b.radius;
+            let bRight = b.x + b.radius;
+
+            // Paddle's top, bottom, left, right edges
+            let pTop = p.y;
+            let pBottom = p.y + p.height;
+            let pLeft = p.x;
+            let pRight = p.x + p.width;
+
+            // Check for collision
+            return bRight > pLeft && bLeft < pRight && bBottom > pTop && bTop < pBottom;
+        }
+
+        function checkWin() {
+            if (player.score >= WINNING_SCORE || genie.score >= WINNING_SCORE) {
+                gameActive = false;
+                overlay.style.display = 'flex';
+                overlayTitle.textContent = player.score >= WINNING_SCORE ? "You Won!" : "Game Over";
+                overlayMessage.innerHTML = player.score >= WINNING_SCORE ?
+                    `You defeated the genie! Impossible! <br>Final Score: ${player.score} - ${genie.score}` :
+                    `The genie wins! As expected. <br>Final Score: ${player.score} - ${genie.score}`;
+                startButton.textContent = "Play Again";
+            }
+        }
+
+        function render() {
+            // Clear canvas with dark blue
+            drawRect(0, 0, canvas.width, canvas.height, '#1E3A8A');
+
+            // Draw net
+            drawNet();
+
+            // Draw player paddle
+            drawRect(player.x, player.y, player.width, player.height, player.color);
+            
+            // Draw genie paddle
+            drawRect(genie.x, genie.y, genie.width, genie.height, genie.color);
+
+            // Draw ball
+            drawCircle(ball.x, ball.y, ball.radius, ball.color);
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Handlers ---
+        startButton.addEventListener('click', () => {
+            resetGame();
+            if (!animationFrameId) {
+                gameLoop();
+            }
+        });
+
+        // Player controls
+        canvas.addEventListener('mousemove', movePlayerPaddle);
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling
+            movePlayerPaddle(e);
+        });
+
+        // Start game on first render
+        render(); // Show initial state
+        
+    </script>
+</body>
+</html>
