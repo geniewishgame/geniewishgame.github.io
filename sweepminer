@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genie's Minesweeper</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* --- Theme from Pong Game --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* gray-900 */
+            color: #E0E7FF; /* indigo-200 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            user-select: none;
+        }
+
+        h1 {
+            font-size: 4rem; /* Increased from 2.25rem */
+            font-weight: 800; /* Made extra bold */
+            margin-bottom: 1rem; 
+            text-align: center;
+            color: #a5b4fc; /* indigo-300 - Kept color scheme */
+            line-height: 1.1;
+            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.125rem; /* text-lg */
+            color: #9CA3AF; /* text-gray-400 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            text-align: center;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            border: 1px solid rgba(99, 102, 241, 0.3); /* indigo-500/30 */
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5);
+            background-color: #1F2937; /* gray-800 */
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            max-width: 95vw;
+            overflow: auto;
+        }
+
+        /* Controls & Status */
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: #FBBF24; /* Gold accent */
+            font-size: 1.2rem;
+        }
+
+        /* Buttons */
+        .btn {
+            background-color: #4F46E5; /* Indigo-600 */
+            color: white;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background-color: #6366F1; /* Indigo-500 */
+            transform: translateY(-1px);
+        }
+        
+        .btn.active {
+            background-color: #FBBF24; /* Gold */
+            color: #1F2937; /* Gray-800 */
+        }
+
+        /* --- Minesweeper Grid --- */
+        #grid {
+            display: grid;
+            gap: 2px;
+            background-color: #374151; /* Border color between cells */
+            border: 4px solid #374151;
+            border-radius: 4px;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #4B5563; /* Gray-600 (Hidden) */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            font-size: 1.2rem;
+        }
+
+        .cell:hover:not(.revealed) {
+            background-color: #6B7280; /* Lighten on hover */
+        }
+
+        .cell.revealed {
+            background-color: #1F2937; /* Gray-800 (Revealed base) */
+            cursor: default;
+        }
+
+        .cell.mine {
+            background-color: #7F1D1D; /* Red-900 background for hits */
+        }
+
+        /* Number Colors */
+        .num-1 { color: #60A5FA; } /* Blue-400 */
+        .num-2 { color: #34D399; } /* Green-400 */
+        .num-3 { color: #F87171; } /* Red-400 */
+        .num-4 { color: #818CF8; } /* Indigo-400 */
+        .num-5 { color: #FBBF24; } /* Amber-400 */
+        .num-6 { color: #34D399; } 
+        .num-7 { color: #E0E7FF; } 
+        .num-8 { color: #9CA3AF; } 
+
+        /* Home Link */
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        .home-link:hover {
+            color: #c7d2fe;
+            text-decoration: underline;
+        }
+
+        /* Overlay */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 24, 39, 0.9);
+            backdrop-filter: blur(4px);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 12px;
+        }
+        #overlay h2 {
+            font-size: 2.5rem;
+            color: #FBBF24;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
+
+        /* Mobile responsiveness for the big title */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧞 Genie's Minesweeper 🧞</h1>
+    <p class="subtitle">Uncover the lamps, but beware the cursed mines!</p>
+
+    <div class="game-container">
+        
+        <div class="controls">
+            <button class="btn active" id="btn-beginner" onclick="setDifficulty('beginner')">Beginner</button>
+            <button class="btn" id="btn-intermediate" onclick="setDifficulty('intermediate')">Intermediate</button>
+            <button class="btn" id="btn-expert" onclick="setDifficulty('expert')">Expert</button>
+        </div>
+
+        <div class="status-bar">
+            <div id="mine-count">💣 10</div>
+            <div id="timer">⏱️ 000</div>
+        </div>
+
+        <div id="grid">
+            <!-- Grid generated by JS -->
+        </div>
+
+        <div id="overlay">
+            <h2 id="overlay-msg">Game Over</h2>
+            <button class="btn" onclick="resetGame()">Try Again</button>
+        </div>
+    </div>
+
+    <a href="https://themastercoder-exe.github.io" class="home-link">
+        &larr; Return to the main page
+    </a>
+
+    <script>
+        // --- Configuration ---
+        const DIFFICULTIES = {
+            beginner: { rows: 8, cols: 10, mines: 10 },
+            intermediate: { rows: 14, cols: 18, mines: 40 },
+            expert: { rows: 20, cols: 24, mines: 99 }
+        };
+
+        // --- State ---
+        let currentDiff = 'beginner';
+        let grid = []; // 2D array of cell objects
+        let rows, cols, minesCount;
+        let flagsLeft;
+        let revealedCount;
+        let gameActive = false;
+        let firstClick = true;
+        let timerInterval;
+        let timeElapsed = 0;
+
+        // --- DOM Elements ---
+        const gridEl = document.getElementById('grid');
+        const mineCountEl = document.getElementById('mine-count');
+        const timerEl = document.getElementById('timer');
+        const overlay = document.getElementById('overlay');
+        const overlayMsg = document.getElementById('overlay-msg');
+        const btns = document.querySelectorAll('.controls .btn');
+
+        // --- Initialization ---
+
+        function setDifficulty(diff) {
+            currentDiff = diff;
+            // Update active button state
+            btns.forEach(b => {
+                if (b.id === `btn-${diff}`) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+            resetGame();
+        }
+
+        function resetGame() {
+            const config = DIFFICULTIES[currentDiff];
+            rows = config.rows;
+            cols = config.cols;
+            minesCount = config.mines;
+            flagsLeft = minesCount;
+            revealedCount = 0;
+            gameActive = true;
+            firstClick = true;
+            timeElapsed = 0;
+            
+            clearInterval(timerInterval);
+            timerEl.textContent = '⏱️ 000';
+            updateMineCount();
+            
+            overlay.style.display = 'none';
+            
+            generateGrid();
+        }
+
+        function generateGrid() {
+            gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${cols}, 30px)`;
+            grid = [];
+
+            for (let r = 0; r < rows; r++) {
+                let row = [];
+                for (let c = 0; c < cols; c++) {
+                    const cellEl = document.createElement('div');
+                    cellEl.classList.add('cell');
+                    cellEl.dataset.row = r;
+                    cellEl.dataset.col = c;
+                    
+                    // Event Listeners
+                    cellEl.addEventListener('click', (e) => handleLeftClick(r, c));
+                    cellEl.addEventListener('contextmenu', (e) => handleRightClick(e, r, c));
+
+                    gridEl.appendChild(cellEl);
+
+                    row.push({
+                        el: cellEl,
+                        isMine: false,
+                        isRevealed: false,
+                        isFlagged: false,
+                        neighborMines: 0
+                    });
+                }
+                grid.push(row);
+            }
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timeElapsed++;
+                timerEl.textContent = `⏱️ ${timeElapsed.toString().padStart(3, '0')}`;
+            }, 1000);
+        }
+
+        // --- Game Logic ---
+
+        function placeMines(excludeRow, excludeCol) {
+            let placed = 0;
+            while (placed < minesCount) {
+                let r = Math.floor(Math.random() * rows);
+                let c = Math.floor(Math.random() * cols);
+
+                // Don't place mine on existing mine, or on the first clicked cell (and neighbors for safety)
+                if (!grid[r][c].isMine && (Math.abs(r - excludeRow) > 1 || Math.abs(c - excludeCol) > 1)) {
+                    grid[r][c].isMine = true;
+                    placed++;
+                }
+            }
+
+            // Calculate numbers
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (!grid[r][c].isMine) {
+                        grid[r][c].neighborMines = countNeighbors(r, c);
+                    }
+                }
+            }
+        }
+
+        function countNeighbors(r, c) {
+            let count = 0;
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    const nr = r + i;
+                    const nc = c + j;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                        if (grid[nr][nc].isMine) count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        function handleLeftClick(r, c) {
+            if (!gameActive || grid[r][c].isFlagged || grid[r][c].isRevealed) return;
+
+            if (firstClick) {
+                firstClick = false;
+                placeMines(r, c);
+                startTimer();
+            }
+
+            const cell = grid[r][c];
+
+            if (cell.isMine) {
+                gameOver(false);
+            } else {
+                revealCell(r, c);
+                checkWin();
+            }
+        }
+
+        function handleRightClick(e, r, c) {
+            e.preventDefault();
+            if (!gameActive || grid[r][c].isRevealed) return;
+
+            const cell = grid[r][c];
+            
+            if (cell.isFlagged) {
+                cell.isFlagged = false;
+                cell.el.textContent = '';
+                flagsLeft++;
+            } else {
+                if (flagsLeft > 0) {
+                    cell.isFlagged = true;
+                    cell.el.textContent = '🚩';
+                    flagsLeft--;
+                }
+            }
+            updateMineCount();
+        }
+
+        function revealCell(r, c) {
+            if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+            const cell = grid[r][c];
+            
+            if (cell.isRevealed || cell.isFlagged) return;
+
+            cell.isRevealed = true;
+            revealedCount++;
+            cell.el.classList.add('revealed');
+
+            if (cell.neighborMines > 0) {
+                cell.el.textContent = cell.neighborMines;
+                cell.el.classList.add(`num-${cell.neighborMines}`);
+            } else {
+                // Flood fill if 0
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        revealCell(r + i, c + j);
+                    }
+                }
+            }
+        }
+
+        function updateMineCount() {
+            mineCountEl.textContent = `💣 ${flagsLeft}`;
+        }
+
+        function checkWin() {
+            if (revealedCount === (rows * cols) - minesCount) {
+                gameOver(true);
+            }
+        }
+
+        function gameOver(won) {
+            gameActive = false;
+            clearInterval(timerInterval);
+
+            // Reveal all mines
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = grid[r][c];
+                    if (cell.isMine) {
+                        if (won) {
+                             cell.el.textContent = '🧞'; // Genie secured
+                        } else {
+                            cell.el.classList.add('mine');
+                            cell.el.textContent = '💥';
+                        }
+                    }
+                }
+            }
+
+            overlay.style.display = 'flex';
+            if (won) {
+                overlayMsg.textContent = "You Win! The Genie is Free!";
+                overlayMsg.style.color = "#34D399"; // Green
+            } else {
+                overlayMsg.textContent = "Game Over! Cursed!";
+                overlayMsg.style.color = "#EF4444"; // Red
+            }
+        }
+
+        // Start the game initially
+        resetGame();
+
+    </script>
+</body>
+</html>
