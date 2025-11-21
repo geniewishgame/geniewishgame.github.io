@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,7 +25,7 @@
         h1 {
             font-size: 2.25rem;
             font-weight: 700;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
             text-align: center;
             color: #a5b4fc;
         }
@@ -110,27 +109,44 @@
             transform: translateY(0);
         }
 
-        #score-display {
+        /* Score & Status Display */
+        #hud {
             position: absolute;
             top: 34px;
             left: 0; right: 0;
             text-align: center;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        #score-display {
             font-size: 2rem;
             font-weight: bold;
             color: #FBBF24;
             text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
-            z-index: 5;
-            pointer-events: none;
+            display: block;
+        }
+
+        #status-display {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 4px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-shadow: 0 0 4px rgba(0,0,0,0.9);
         }
     </style>
 </head>
 <body>
 
     <h1>Labyrinth of the Lamp</h1>
-    <p class="subtitle">Guide the Genie to collect all Wish Orbs. Avoid the wandering Shadows.<br>Use Arrow Keys to move.</p>
+    <p class="subtitle">Collect Orbs. Beware: Shadows alternate between Hunting and Wandering.</p>
 
     <div class="game-container">
-        <div id="score-display">Score: 0</div>
+        <div id="hud">
+            <span id="score-display">Score: 0</span>
+            <span id="status-display">WAITING...</span>
+        </div>
         <canvas id="gameCanvas" width="400" height="400"></canvas>
         
         <div id="overlay">
@@ -148,22 +164,26 @@
         const overlayTitle = document.getElementById('overlay-title');
         const overlayMessage = document.getElementById('overlay-message');
         const scoreDisplay = document.getElementById('score-display');
+        const statusDisplay = document.getElementById('status-display');
 
         // --- Configuration ---
         const TILE_SIZE = 20;
         const ROWS = 20;
         const COLS = 20;
-        const PACMAN_SPEED = 2; // Pixels per frame
+        const PACMAN_SPEED = 2; 
         const GHOST_SPEED = 2;
 
+        // AI Configuration
+        const HUNT_DURATION = 300; // Frames (approx 5 seconds)
+        const WANDER_DURATION = 200; // Frames (approx 3.5 seconds)
+
         // Colors
-        const COLOR_WALL = '#1F2937'; // Surface color
+        const COLOR_WALL = '#1F2937'; 
         const COLOR_DOT = '#FBBF24';
         const COLOR_GENIE = '#8B5CF6';
-        const COLOR_GHOSTS = ['#a5b4fc', '#6366F1', '#9CA3AF']; // Theme colors
+        const COLOR_GHOSTS = ['#ef4444', '#6366F1', '#10b981']; // Red (Aggro), Indigo, Emerald
 
-        // 1 = Wall, 0 = Dot, 9 = Empty Path (no dot), 5 = Ghost House (no entry usually, but simplified here)
-        // 20x20 Grid
+        // 1 = Wall, 0 = Dot, 9 = Empty Path, 5 = Ghost House
         const LEVEL_MAP_TEMPLATE = [
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
@@ -191,8 +211,11 @@
         let gameActive = false;
         let score = 0;
         let animationId;
-        let frameCount = 0;
         let totalDots = 0;
+
+        // AI State
+        let aiMode = 'WANDER'; // 'HUNT' or 'WANDER'
+        let aiTimer = 0;
 
         // Actors
         let player = { x: 0, y: 0, dx: 0, dy: 0, nextDx: 0, nextDy: 0, mouthOpen: 0 };
@@ -201,12 +224,9 @@
         // --- Input Handling ---
         document.addEventListener('keydown', (e) => {
             if (!gameActive) return;
-            
-            // Prevent scrolling
             if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
                 e.preventDefault();
             }
-
             switch(e.code) {
                 case 'ArrowLeft':  player.nextDx = -1; player.nextDy = 0; break;
                 case 'ArrowRight': player.nextDx = 1;  player.nextDy = 0; break;
@@ -215,38 +235,32 @@
             }
         });
 
-        // --- Core Logic ---
-
         function resetGame() {
-            // Deep copy map
             map = LEVEL_MAP_TEMPLATE.map(row => [...row]);
-            
             score = 0;
             totalDots = 0;
+            aiMode = 'WANDER';
+            aiTimer = 0;
             scoreDisplay.textContent = `Score: 0`;
-            
-            // Count dots
+            updateStatusDisplay();
+
             for(let r=0; r<ROWS; r++) {
                 for(let c=0; c<COLS; c++) {
                     if(map[r][c] === 0) totalDots++;
                 }
             }
 
-            // Setup Player (Start at a specific empty spot, e.g., 1,1)
             player = { 
-                x: TILE_SIZE * 1.5, 
-                y: TILE_SIZE * 1.5, 
-                dx: 0, dy: 0, 
-                nextDx: 0, nextDy: 0,
-                radius: 8,
-                mouthTimer: 0
+                x: TILE_SIZE * 1.5, y: TILE_SIZE * 1.5, 
+                dx: 0, dy: 0, nextDx: 0, nextDy: 0,
+                radius: 8, mouthTimer: 0
             };
 
-            // Setup Ghosts
+            // Initialize ghosts at different spots
             ghosts = [
-                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[0] },
-                { x: TILE_SIZE * 10.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[1] },
-                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 10.5, dx: 1, dy: 0, color: COLOR_GHOSTS[2] }
+                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[0] }, // Red
+                { x: TILE_SIZE * 10.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[1] }, // Indigo
+                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 10.5, dx: 1, dy: 0, color: COLOR_GHOSTS[2] }  // Emerald
             ];
 
             gameActive = true;
@@ -261,110 +275,115 @@
         }
 
         function canMove(x, y, dx, dy) {
-            // Check the tile we are moving INTO
-            // We use a small tolerance to allow smooth turning
             const col = Math.floor((x + dx * (TILE_SIZE/2 + 1)) / TILE_SIZE);
             const row = Math.floor((y + dy * (TILE_SIZE/2 + 1)) / TILE_SIZE);
             return !isWall(col, row);
         }
 
+        function updateStatusDisplay() {
+            if (aiMode === 'HUNT') {
+                statusDisplay.textContent = "⚠️ SHADOWS ARE HUNTING";
+                statusDisplay.style.color = "#ef4444"; // Red alert
+            } else {
+                statusDisplay.textContent = "🔄 SHADOWS ARE WANDERING";
+                statusDisplay.style.color = "#a5b4fc"; // Calm indigo
+            }
+        }
+
+        function updateAIState() {
+            aiTimer++;
+            let limit = (aiMode === 'HUNT') ? HUNT_DURATION : WANDER_DURATION;
+            
+            if (aiTimer > limit) {
+                aiTimer = 0;
+                // Toggle mode
+                aiMode = (aiMode === 'HUNT') ? 'WANDER' : 'HUNT';
+                updateStatusDisplay();
+                
+                // Optional: Reverse ghosts immediately on switch for classic behavior
+                ghosts.forEach(g => {
+                    if (canMove(g.x, g.y, -g.dx, -g.dy)) {
+                        g.dx = -g.dx;
+                        g.dy = -g.dy;
+                    }
+                });
+            }
+        }
+
         function updatePlayer() {
-            // 1. Try to change direction if queued
-            // Only allow turning if centered on a tile
             const centerX = Math.floor(player.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
             const centerY = Math.floor(player.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
             const dist = Math.sqrt((player.x - centerX)**2 + (player.y - centerY)**2);
 
             if (dist < 3) {
-                // We are roughly center, try to apply next direction
                 if (player.nextDx !== 0 || player.nextDy !== 0) {
                     if (canMove(centerX, centerY, player.nextDx, player.nextDy)) {
-                        player.x = centerX;
-                        player.y = centerY;
-                        player.dx = player.nextDx;
-                        player.dy = player.nextDy;
-                        player.nextDx = 0; 
-                        player.nextDy = 0;
+                        player.x = centerX; player.y = centerY;
+                        player.dx = player.nextDx; player.dy = player.nextDy;
+                        player.nextDx = 0; player.nextDy = 0;
                     }
                 }
-                
-                // Also check if current direction is hitting a wall
                 if (!canMove(centerX, centerY, player.dx, player.dy)) {
-                    player.dx = 0;
-                    player.dy = 0;
-                    // Snap to center to look clean
-                    player.x = centerX;
-                    player.y = centerY;
+                    player.dx = 0; player.dy = 0;
+                    player.x = centerX; player.y = centerY;
                 }
             }
-
             player.x += player.dx * PACMAN_SPEED;
             player.y += player.dy * PACMAN_SPEED;
-
-            // Mouth animation
             player.mouthTimer++;
         }
 
-        function checkCollisions() {
-            // Dot Collision
-            const col = Math.floor(player.x / TILE_SIZE);
-            const row = Math.floor(player.y / TILE_SIZE);
-
-            if (map[row][col] === 0) {
-                map[row][col] = 9; // set to empty
-                score += 10;
-                scoreDisplay.textContent = `Score: ${score}`;
-                if (score === totalDots * 10) {
-                    gameOver(true);
-                }
-            }
-
-            // Ghost Collision
-            for (let g of ghosts) {
-                const dist = Math.sqrt((player.x - g.x)**2 + (player.y - g.y)**2);
-                if (dist < TILE_SIZE * 0.8) {
-                    gameOver(false);
-                }
-            }
-        }
-
         function updateGhosts() {
+            updateAIState();
+
             ghosts.forEach(g => {
                 const centerX = Math.floor(g.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
                 const centerY = Math.floor(g.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
                 const dist = Math.sqrt((g.x - centerX)**2 + (g.y - centerY)**2);
 
+                // Only make decisions when centered on a tile
                 if (dist < 3) {
                     g.x = centerX;
                     g.y = centerY;
 
-                    // Simple AI: Random valid direction that isn't backwards (unless stuck)
                     const directions = [
-                        { dx: 0, dy: -1 }, // Up
-                        { dx: 0, dy: 1 },  // Down
-                        { dx: -1, dy: 0 }, // Left
-                        { dx: 1, dy: 0 }   // Right
+                        { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+                        { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
                     ];
 
+                    // Get all valid directions (not into walls)
                     const validDirs = directions.filter(d => canMove(g.x, g.y, d.dx, d.dy));
                     
-                    if (validDirs.length > 0) {
-                        // Filter out reverse direction to prevent jitter, unless it's a dead end
-                        const nonReverse = validDirs.filter(d => !(d.dx === -g.dx && d.dy === -g.dy));
-                        
-                        if (nonReverse.length > 0) {
-                            const choice = nonReverse[Math.floor(Math.random() * nonReverse.length)];
+                    // Filter out the direction we just came from (no 180 turns)
+                    // unless that's the only option (dead end)
+                    const nonReverse = validDirs.filter(d => !(d.dx === -g.dx && d.dy === -g.dy));
+                    const candidates = nonReverse.length > 0 ? nonReverse : validDirs;
+
+                    if (candidates.length > 0) {
+                        if (aiMode === 'WANDER') {
+                            // RANDOM MOVEMENT
+                            const choice = candidates[Math.floor(Math.random() * candidates.length)];
                             g.dx = choice.dx;
                             g.dy = choice.dy;
                         } else {
-                            // Dead end, must reverse
-                            g.dx = -g.dx;
-                            g.dy = -g.dy;
+                            // HUNT MOVEMENT (Target Player)
+                            let bestDir = candidates[0];
+                            let minDistance = Infinity;
+
+                            candidates.forEach(d => {
+                                const nextX = g.x + (d.dx * TILE_SIZE);
+                                const nextY = g.y + (d.dy * TILE_SIZE);
+                                // Simple Euclidean distance to player
+                                const distToPlayer = Math.sqrt((nextX - player.x)**2 + (nextY - player.y)**2);
+                                
+                                if (distToPlayer < minDistance) {
+                                    minDistance = distToPlayer;
+                                    bestDir = d;
+                                }
+                            });
+                            g.dx = bestDir.dx;
+                            g.dy = bestDir.dy;
                         }
-                    } else {
-                        // Completely stuck (shouldn't happen in this map)
-                        g.dx = -g.dx;
-                        g.dy = -g.dy;
                     }
                 }
 
@@ -373,12 +392,27 @@
             });
         }
 
+        function checkCollisions() {
+            const col = Math.floor(player.x / TILE_SIZE);
+            const row = Math.floor(player.y / TILE_SIZE);
+
+            if (map[row][col] === 0) {
+                map[row][col] = 9; 
+                score += 10;
+                scoreDisplay.textContent = `Score: ${score}`;
+                if (score === totalDots * 10) gameOver(true);
+            }
+
+            for (let g of ghosts) {
+                const dist = Math.sqrt((player.x - g.x)**2 + (player.y - g.y)**2);
+                if (dist < TILE_SIZE * 0.8) gameOver(false);
+            }
+        }
+
         function draw() {
-            // Clear
             ctx.fillStyle = '#111827';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Map
             for(let r=0; r<ROWS; r++) {
                 for(let c=0; c<COLS; c++) {
                     const cell = map[r][c];
@@ -386,15 +420,12 @@
                     const y = r * TILE_SIZE;
 
                     if (cell === 1) {
-                        // Wall
                         ctx.fillStyle = COLOR_WALL;
                         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-                        // Add border for detail
                         ctx.strokeStyle = '#374151';
                         ctx.lineWidth = 1;
                         ctx.strokeRect(x,y,TILE_SIZE,TILE_SIZE);
                     } else if (cell === 0) {
-                        // Dot
                         ctx.fillStyle = COLOR_DOT;
                         ctx.beginPath();
                         ctx.arc(x + TILE_SIZE/2, y + TILE_SIZE/2, 3, 0, Math.PI*2);
@@ -403,18 +434,15 @@
                 }
             }
 
-            // Draw Player (Genie)
+            // Draw Player
             ctx.fillStyle = COLOR_GENIE;
             ctx.beginPath();
-            
-            // Mouth logic
             const angle = 0.2 * Math.PI * (Math.sin(player.mouthTimer * 0.2) + 1); 
             let rotation = 0;
             if (player.dx === 1) rotation = 0;
             if (player.dx === -1) rotation = Math.PI;
             if (player.dy === -1) rotation = -Math.PI/2;
             if (player.dy === 1) rotation = Math.PI/2;
-
             ctx.save();
             ctx.translate(player.x, player.y);
             ctx.rotate(rotation);
@@ -431,8 +459,6 @@
                 ctx.lineTo(g.x + 8, g.y + 8);
                 ctx.lineTo(g.x - 8, g.y + 8);
                 ctx.fill();
-                
-                // Eyes
                 ctx.fillStyle = 'white';
                 ctx.beginPath();
                 ctx.arc(g.x - 3, g.y - 3, 2.5, 0, Math.PI*2);
@@ -443,37 +469,30 @@
 
         function gameLoop() {
             if (!gameActive) return;
-
             updatePlayer();
             updateGhosts();
             checkCollisions();
             draw();
-
             animationId = requestAnimationFrame(gameLoop);
         }
 
         function gameOver(win) {
             gameActive = false;
             cancelAnimationFrame(animationId);
-            
             overlayTitle.textContent = win ? "YOU ESCAPED!" : "GAME OVER";
             overlayMessage.innerHTML = win 
                 ? `You collected all wishes!<br>Score: <span style="color:#FBBF24">${score}</span>` 
                 : `The shadows caught you.<br>Score: <span style="color:#FBBF24">${score}</span>`;
-            
             startButton.textContent = win ? "Play Again" : "Try Again";
             overlay.style.display = 'flex';
         }
 
-        // Setup
         startButton.addEventListener('click', resetGame);
-        
-        // Initial Draw
         resetGame();
-        gameActive = false; // Stop immediately to show menu
+        gameActive = false;
         overlay.style.display = 'flex';
         overlayTitle.textContent = "The Labyrinth";
-        overlayMessage.innerHTML = "Collect all gold orbs.<br>Avoid the shadows.";
+        overlayMessage.innerHTML = "Collect gold orbs.<br>Shadows hunt, then wander.";
         startButton.textContent = "Start Game";
 
     </script>
