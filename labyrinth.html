@@ -81,7 +81,7 @@
         const TILE_SIZE = 20;
         const ROWS = 20;
         const COLS = 20;
-        const PACMAN_SPEED = 2; // Must be a factor of TILE_SIZE (20 % 2 == 0) for this logic to work perfectly
+        const GENIE_SPEED = 2; // Must be a factor of TILE_SIZE (20 % 2 == 0) for this logic to work perfectly
         const GHOST_SPEED = 2; 
 
         // AI Settings
@@ -233,7 +233,7 @@
             const dist = Math.sqrt((player.x - centerX)**2 + (player.y - centerY)**2);
 
             // If we are close to the center of a tile, we can turn
-            if (dist < PACMAN_SPEED) {
+            if (dist < GENIE_SPEED) {
                 // Snap to center to ensure clean turning
                 player.x = centerX;
                 player.y = centerY;
@@ -254,8 +254,8 @@
                 }
             }
 
-            player.x += player.dx * PACMAN_SPEED;
-            player.y += player.dy * PACMAN_SPEED;
+            player.x += player.dx * GENIE_SPEED;
+            player.y += player.dy * GENIE_SPEED;
             player.mouthTimer++;
         }
 
