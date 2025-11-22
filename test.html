@@ -51,7 +51,7 @@
 <body>
 
     <h1>Labyrinth of the Lamp</h1>
-    <p class="subtitle">Collect Orbs. Find the Cyan Freeze Orbs to stop the Shadows temporarily.</p>
+    <p class="subtitle">Collect Orbs. Find <strong>Freeze Orbs</strong> (Cyan) to stop the ghosts.</p>
 
     <div class="game-container">
         <div id="hud">
@@ -62,7 +62,7 @@
         
         <div id="overlay">
             <h2 id="overlay-title">Ready?</h2>
-            <p id="overlay-message">Shadows are faster now.<br>Use Freeze Orbs wisely!</p>
+            <p id="overlay-message">Ghosts are faster now.<br>Use Freeze Orbs to survive!</p>
             <button id="start-button" class="btn-start">Start Game</button>
         </div>
     </div>
@@ -82,18 +82,18 @@
         const ROWS = 20;
         const COLS = 20;
         
-        // --- SPEED CONFIGURATION (Updated) ---
+        // Speed Settings
         const PLAYER_SPEED = 2; 
-        const GHOST_SPEED_WANDER = 2.1; // Slightly faster than player
-        const GHOST_SPEED_HUNT = 2.5;   // Much faster than player 
+        const GHOST_SPEED_WANDER = 2.1; // Faster than player
+        const GHOST_SPEED_HUNT = 2.5;   // Much faster than player
 
         // AI Settings
         const HUNT_DURATION = 300; 
         const WANDER_DURATION = 200; 
 
-        // Freeze Settings (New)
+        // Freeze Settings
         const NUM_FREEZES = 2;
-        const FREEZE_DURATION = 300; // ~5 seconds
+        const FREEZE_DURATION = 300; // ~5 seconds (60fps * 5)
 
         // Colors
         const COLOR_WALL = '#1F2937'; 
@@ -101,12 +101,12 @@
         const COLOR_FREEZE = '#06b6d4'; // Cyan
         const COLOR_GENIE = '#8B5CF6';
         const COLOR_GHOSTS = ['#a5b4fc', '#6366F1', '#9CA3AF']; 
-        const COLOR_GHOST_FROZEN = '#06b6d4'; // Cyan for frozen ghosts
+        const COLOR_GHOST_FROZEN = '#06b6d4';
 
-        // Map: 1=Wall, 0=Dot, 9=Empty, 5=Freeze
+        // Map: 1=Wall, 0=Dot, 9=Empty, 5=Freeze Orb
         const LEVEL_MAP_TEMPLATE = [
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
             [1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],
             [1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],
             [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -114,7 +114,7 @@
             [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
             [1,1,1,1,0,1,1,1,9,1,1,9,1,1,1,0,1,1,1,1],
             [1,1,1,1,0,1,9,9,9,9,9,9,9,9,1,0,1,1,1,1],
-            [9,0,0,0,0,1,9,1,1,9,9,1,1,9,1,0,0,0,0,9], // Tunnel Row
+            [1,0,0,0,0,1,9,1,1,9,9,1,1,9,1,0,0,0,0,1], // Tunnel row
             [1,1,1,1,0,1,9,1,9,9,9,9,1,9,1,0,1,1,1,1],
             [1,1,1,1,0,1,9,1,1,1,1,1,1,9,1,0,1,1,1,1],
             [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
@@ -129,4 +129,147 @@
 
         let map = [];
         let gameActive = false;
-        let
+        let score = 0;
+        let animationId;
+        let totalDots = 0;
+
+        // AI State
+        let aiMode = 'WANDER'; 
+        let aiTimer = 0;
+        let isFrozen = false;
+        let freezeTimer = 0;
+
+        // Actors
+        let player = {};
+        let ghosts = [];
+
+        // --- Input ---
+        document.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+            switch(e.code) {
+                case 'ArrowLeft':  player.nextDx = -1; player.nextDy = 0; break;
+                case 'ArrowRight': player.nextDx = 1;  player.nextDy = 0; break;
+                case 'ArrowUp':    player.nextDx = 0;  player.nextDy = -1; break;
+                case 'ArrowDown':  player.nextDx = 0;  player.nextDy = 1; break;
+            }
+        });
+
+        function resetGame() {
+            map = LEVEL_MAP_TEMPLATE.map(row => [...row]);
+            score = 0;
+            totalDots = 0;
+            aiMode = 'WANDER';
+            aiTimer = 0;
+            isFrozen = false;
+            freezeTimer = 0;
+            scoreDisplay.textContent = `Score: 0`;
+
+            // 1. Find all dot locations
+            let dotLocations = [];
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    if(map[r][c] === 0) {
+                        dotLocations.push({r, c});
+                    }
+                }
+            }
+
+            // 2. Randomly replace dots with Freeze Orbs
+            for(let i=0; i<NUM_FREEZES; i++) {
+                if(dotLocations.length > 0) {
+                    const idx = Math.floor(Math.random() * dotLocations.length);
+                    const loc = dotLocations.splice(idx, 1)[0];
+                    map[loc.r][loc.c] = 5; // 5 = Freeze Orb
+                }
+            }
+
+            // 3. Count total objectives (Dots + Freeze Orbs)
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    if(map[r][c] === 0 || map[r][c] === 5) totalDots++;
+                }
+            }
+            
+            updateStatusDisplay();
+
+            // Start Player
+            player = { 
+                x: TILE_SIZE * 1.5, y: TILE_SIZE * 1.5, 
+                dx: 0, dy: 0, nextDx: 0, nextDy: 0,
+                radius: 8, mouthTimer: 0
+            };
+
+            // Start Ghosts
+            ghosts = [
+                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[0] }, 
+                { x: TILE_SIZE * 10.5, y: TILE_SIZE * 9.5, dx: 0, dy: -1, color: COLOR_GHOSTS[1] }, 
+                { x: TILE_SIZE * 9.5, y: TILE_SIZE * 10.5, dx: 1, dy: 0, color: COLOR_GHOSTS[2] } 
+            ];
+
+            gameActive = true;
+            overlay.style.display = 'none';
+            cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function isWall(c, r) {
+            if (r === 9 && (c < 0 || c >= COLS)) return false; // Tunnel
+            if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
+            return map[r][c] === 1;
+        }
+
+        function updateStatusDisplay() {
+            if (isFrozen) {
+                statusDisplay.textContent = "❄️ GHOSTS FROZEN";
+                statusDisplay.style.color = COLOR_FREEZE;
+            } else if (aiMode === 'HUNT') {
+                statusDisplay.textContent = "⚠️ SHADOWS ARE HUNTING";
+                statusDisplay.style.color = "#ef4444";
+            } else {
+                statusDisplay.textContent = "🔄 SHADOWS ARE WANDERING";
+                statusDisplay.style.color = "#a5b4fc";
+            }
+        }
+
+        function updateAIState() {
+            aiTimer++;
+            let limit = (aiMode === 'HUNT') ? HUNT_DURATION : WANDER_DURATION;
+            
+            if (aiTimer > limit) {
+                aiTimer = 0;
+                aiMode = (aiMode === 'HUNT') ? 'WANDER' : 'HUNT';
+                
+                // Only update display if not frozen (frozen status takes priority)
+                if (!isFrozen) updateStatusDisplay();
+                
+                ghosts.forEach(g => {
+                    const col = Math.floor(g.x / TILE_SIZE);
+                    const row = Math.floor(g.y / TILE_SIZE);
+                    const backDx = -g.dx;
+                    const backDy = -g.dy;
+                    
+                    if (!isWall(col + backDx, row + backDy)) {
+                        g.dx = backDx;
+                        g.dy = backDy;
+                    }
+                });
+            }
+        }
+
+        function updatePlayer() {
+            const centerCol = Math.floor(player.x / TILE_SIZE);
+            const centerRow = Math.floor(player.y / TILE_SIZE);
+            const centerX = centerCol * TILE_SIZE + TILE_SIZE/2;
+            const centerY = centerRow * TILE_SIZE + TILE_SIZE/2;
+
+            const dist = Math.sqrt((player.x - centerX)**2 + (player.y - centerY)**2);
+
+            if (dist < PLAYER_SPEED) {
+                player.x = centerX;
+                player.y = centerY;
+
+                if (player.nextDx !== 0 || player.nextDy !== 0) {
+                    if (!isWall(centerCol + player.nextDx, centerRow + player.nextDy)) {
