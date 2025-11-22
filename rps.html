@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧞</text></svg>">
+    <title>The Wish Game: Genie's RPS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- THEME EXTRACTED FROM GENIE'S PONG --- */
+        
+        /* General Body and Font Setup */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #111827; /* Dark background (gray-900) */
+            font-family: 'Inter', sans-serif;
+            color: #E0E7FF; /* Light purple-blue text (indigo-200) */
+            user-select: none;
+            padding: 20px;
+        }
+
+        /* Page Header */
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            text-align: center;
+            color: #a5b4fc; /* indigo-300 */
+        }
+        
+        .subtitle {
+            font-size: 1.125rem;
+            color: #9CA3AF; /* text-gray-400 */
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        /* Main Game Container */
+        .game-container {
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(79, 70, 229, 0.5), 0 0 15px rgba(255, 255, 255, 0.1);
+            position: relative;
+            background-color: #1F2937; /* gray-800 */
+            width: 600px; /* Slightly narrower than Pong for RPS */
+            max-width: 100%;
+            padding: 32px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Visual Arena (Replacing Canvas) */
+        .arena {
+            width: 100%;
+            background-color: #1E3A8A; /* Deep blue background (Match Pong Canvas) */
+            border-radius: 8px;
+            padding: 40px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            box-sizing: border-box;
+            min-height: 250px;
+            position: relative;
+        }
+
+        /* Score Display */
+        .score-board {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #a5b4fc;
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Move Emojis */
+        .move-display {
+            font-size: 5rem;
+            transition: transform 0.2s;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+        }
+
+        .vs-text {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #FBBF24; /* Amber/Gold */
+            opacity: 0.5;
+        }
+
+        /* Result Text */
+        .result-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #FBBF24; /* Amber/Gold */
+            min-height: 1.5em;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        /* Controls Area */
+        .controls {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        /* Buttons (Reusing .btn-start style) */
+        .btn-action {
+            background-color: #4F46E5; /* Indigo-600 */
+            color: white;
+            padding: 16px 24px;
+            font-size: 1.5rem; /* Larger for emojis */
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6);
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn-action:hover {
+            background-color: #6366F1; /* indigo-500 */
+            transform: translateY(-2px);
+        }
+
+        .btn-action:active {
+            transform: translateY(0);
+        }
+
+        .btn-action:disabled {
+            background-color: #374151;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+            opacity: 0.5;
+        }
+
+        /* Overlay (Game Over/Start) - Copied exactly */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(31, 41, 55, 0.9); /* Slightly darker for contrast */
+            backdrop-filter: blur(5px);
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 12px;
+            z-index: 10;
+            padding: 20px;
+        }
+
+        #overlay h2 {
+            font-size: 2.5rem;
+            color: #FBBF24;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+            margin-top: 0;
+        }
+
+        #overlay p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+
+        .btn-restart {
+            background-color: #4F46E5;
+            color: white;
+            padding: 12px 32px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.6);
+        }
+
+        .btn-restart:hover {
+            background-color: #6366F1;
+            transform: translateY(-2px);
+        }
+
+        .home-link {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #a5b4fc;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .home-link:hover {
+            color: #c7d2fe;
+            text-decoration: underline;
+        }
+
+        /* Simple Animation classes */
+        .shake {
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(10deg); }
+            50% { transform: rotate(-10deg); }
+            75% { transform: rotate(5deg); }
+            100% { transform: rotate(0deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧞 Genie's RPS 🧞</h1>
+    <p class="subtitle">Rock beats Scissors. Scissors beats Paper. Paper beats Rock. First to 5 wins!</p>
+
+    <div class="game-container">
+        
+        <div class="score-board">
+            <span id="player-score-text">You: 0</span>
+            <span id="genie-score-text">Genie: 0</span>
+        </div>
+
+        <div class="arena">
+            <div id="player-move" class="move-display">✊</div>
+            <div class="vs-text">VS</div>
+            <div id="genie-move" class="move-display">🧞</div>
+        </div>
+
+        <div id="result-message" class="result-text">Choose your weapon...</div>
+
+        <div class="controls">
+            <button class="btn-action" onclick="playRound('rock')" title="Rock">✊</button>
+            <button class="btn-action" onclick="playRound('paper')" title="Paper">📄</button>
+            <button class="btn-action" onclick="playRound('scissors')" title="Scissors">✂️</button>
+        </div>
+
+        <div id="overlay">
+            <h2 id="overlay-title">Game Over</h2>
+            <p id="overlay-message">Message goes here</p>
+            <button class="btn-restart" onclick="resetGame()">Play Again</button>
+        </div>
+
+    </div>
+
+    <a href="#" class="home-link">
+        &larr; Return to the main page
+    </a>
+
+    <script>
+        // Game State
+        let playerScore = 0;
+        let genieScore = 0;
+        const WINNING_SCORE = 5;
+        let isAnimating = false;
+
+        // DOM Elements
+        const playerMoveEl = document.getElementById('player-move');
+        const genieMoveEl = document.getElementById('genie-move');
+        const resultMessageEl = document.getElementById('result-message');
+        const playerScoreEl = document.getElementById('player-score-text');
+        const genieScoreEl = document.getElementById('genie-score-text');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMessage = document.getElementById('overlay-message');
+        const buttons = document.querySelectorAll('.btn-action');
+
+        const choices = ['rock', 'paper', 'scissors'];
+        const icons = {
+            'rock': '✊',
+            'paper': '📄',
+            'scissors': '✂️',
+            'genie': '🧞'
+        };
+
+        function getGenieChoice() {
+            const randomIndex = Math.floor(Math.random() * 3);
+            return choices[randomIndex];
+        }
+
+        function determineWinner(p, g) {
+            if (p === g) return 'draw';
+            if (
+                (p === 'rock' && g === 'scissors') ||
+                (p === 'paper' && g === 'rock') ||
+                (p === 'scissors' && g === 'paper')
+            ) {
+                return 'player';
+            }
+            return 'genie';
+        }
+
+        function playRound(playerChoice) {
+            if (isAnimating) return;
+            isAnimating = true;
+
+            // Disable buttons briefly
+            buttons.forEach(btn => btn.disabled = true);
+
+            // Reset Visuals for animation
+            playerMoveEl.textContent = '✊';
+            genieMoveEl.textContent = '✊';
+            resultMessageEl.textContent = "Rock... Paper... Scissors...";
+            
+            // Add shake animation
+            playerMoveEl.classList.add('shake');
+            genieMoveEl.classList.add('shake');
+
+            // Wait for animation to finish (0.5s)
+            setTimeout(() => {
+                playerMoveEl.classList.remove('shake');
+                genieMoveEl.classList.remove('shake');
+
+                const genieChoice = getGenieChoice();
+                const winner = determineWinner(playerChoice, genieChoice);
+
+                // Update Icons
+                playerMoveEl.textContent = icons[playerChoice];
+                genieMoveEl.textContent = icons[genieChoice];
+
+                // Update Score & Text
+                if (winner === 'player') {
+                    playerScore++;
+                    resultMessageEl.textContent = "You win this round!";
+                    resultMessageEl.style.color = "#FBBF24"; // Gold
+                } else if (winner === 'genie') {
+                    genieScore++;
+                    resultMessageEl.textContent = "The Genie wins this round.";
+                    resultMessageEl.style.color = "#a5b4fc"; // Indigo
+                } else {
+                    resultMessageEl.textContent = "It's a draw!";
+                    resultMessageEl.style.color = "#9CA3AF"; // Gray
+                }
+
+                updateScoreBoard();
+                
+                // Check Win Condition
+                if (playerScore >= WINNING_SCORE || genieScore >= WINNING_SCORE) {
+                    setTimeout(endGame, 500);
+                } else {
+                    isAnimating = false;
+                    buttons.forEach(btn => btn.disabled = false);
+                }
+            }, 500);
+        }
+
+        function updateScoreBoard() {
+            playerScoreEl.textContent = `You: ${playerScore}`;
+            genieScoreEl.textContent = `Genie: ${genieScore}`;
+        }
+
+        function endGame() {
+            overlay.style.display = 'flex';
+            
+            if (playerScore > genieScore) {
+                overlayTitle.textContent = "You Won!";
+                overlayMessage.innerHTML = `You outsmarted the Genie! <br> Final Score: ${playerScore} - ${genieScore}`;
+            } else {
+                overlayTitle.textContent = "Game Over";
+                overlayMessage.innerHTML = `The Genie is victorious. <br> Final Score: ${playerScore} - ${genieScore}`;
+            }
+        }
+
+        function resetGame() {
+            playerScore = 0;
+            genieScore = 0;
+            updateScoreBoard();
+            
+            playerMoveEl.textContent = '✊';
+            genieMoveEl.textContent = '🧞';
+            resultMessageEl.textContent = "Choose your weapon...";
+            resultMessageEl.style.color = "#FBBF24";
+
+            overlay.style.display = 'none';
+            isAnimating = false;
+            buttons.forEach(btn => btn.disabled = false);
+        }
+    </script>
+</body>
+</html>
