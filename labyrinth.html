@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -52,7 +51,7 @@
 <body>
 
     <h1>Labyrinth of the Lamp</h1>
-    <p class="subtitle">Collect Orbs. Beware: Shadows alternate between Hunting and Wandering.</p>
+    <p class="subtitle">Collect Wish Orbs and avoid the shadows, who alternate between wandering and hunting. Tunnels close when the Shadows hunt.</p>
 
     <div class="game-container">
         <div id="hud">
@@ -96,7 +95,6 @@
         const COLOR_GHOSTS = ['#a5b4fc', '#6366F1', '#9CA3AF']; 
 
         // Map: 1=Wall, 0=Dot, 9=Empty
-        // CHANGED: Row 9 (index 9) now starts and ends with '9' (Empty) instead of '1' (Wall)
         const LEVEL_MAP_TEMPLATE = [
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -107,7 +105,7 @@
             [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
             [1,1,1,1,0,1,1,1,9,1,1,9,1,1,1,0,1,1,1,1],
             [1,1,1,1,0,1,9,9,9,9,9,9,9,9,1,0,1,1,1,1],
-            [0,0,0,0,0,1,9,1,1,9,9,1,1,9,1,0,0,0,0,0], // <--- Tunnel Row
+            [0,0,0,0,0,1,9,1,1,9,9,1,1,9,1,0,0,0,0,0], // <--- Tunnel Row (Index 9)
             [1,1,1,1,0,1,9,1,9,9,9,9,1,9,1,0,1,1,1,1],
             [1,1,1,1,0,1,9,1,1,1,1,1,1,9,1,0,1,1,1,1],
             [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
@@ -184,7 +182,7 @@
         }
 
         function isWall(c, r) {
-            // CHANGED: Allow movement off-screen if we are in the Tunnel Row (Row 9)
+            // Allow movement off-screen if we are in the Tunnel Row
             if (r === 9 && (c < 0 || c >= COLS)) return false;
 
             if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
@@ -193,10 +191,10 @@
 
         function updateStatusDisplay() {
             if (aiMode === 'HUNT') {
-                statusDisplay.textContent = "⚠️ SHADOWS ARE HUNTING";
+                statusDisplay.textContent = "⚠️ HUNTING (TUNNELS CLOSED)";
                 statusDisplay.style.color = "#ef4444";
             } else {
-                statusDisplay.textContent = "🔄 SHADOWS ARE WANDERING";
+                statusDisplay.textContent = "🔄 WANDERING (TUNNELS OPEN)";
                 statusDisplay.style.color = "#a5b4fc";
             }
         }
@@ -210,6 +208,17 @@
                 aiMode = (aiMode === 'HUNT') ? 'WANDER' : 'HUNT';
                 updateStatusDisplay();
                 
+                // --- NEW TUNNEL LOGIC ---
+                // When Hunting, set tunnel entrances to Walls (1). 
+                // When Wandering, set tunnel entrances to Empty (9).
+                const tunnelState = (aiMode === 'HUNT') ? 1 : 9;
+                
+                // Left Tunnel Entrance (Row 9, Col 0)
+                map[9][0] = tunnelState; 
+                // Right Tunnel Entrance (Row 9, Col 19)
+                map[9][COLS-1] = tunnelState;
+                // ------------------------
+
                 ghosts.forEach(g => {
                     const col = Math.floor(g.x / TILE_SIZE);
                     const row = Math.floor(g.y / TILE_SIZE);
