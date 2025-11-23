@@ -191,10 +191,10 @@
 
         function updateStatusDisplay() {
             if (aiMode === 'HUNT') {
-                statusDisplay.textContent = "⚠️ HUNTING (TUNNELS CLOSED)";
+                statusDisplay.textContent = "⚠️ SHADOWS ARE HUNTING";
                 statusDisplay.style.color = "#ef4444";
             } else {
-                statusDisplay.textContent = "🔄 WANDERING (TUNNELS OPEN)";
+                statusDisplay.textContent = "🔄 SHADOWS ARE WANDERING";
                 statusDisplay.style.color = "#a5b4fc";
             }
         }
@@ -207,17 +207,6 @@
                 aiTimer = 0;
                 aiMode = (aiMode === 'HUNT') ? 'WANDER' : 'HUNT';
                 updateStatusDisplay();
-                
-                // --- NEW TUNNEL LOGIC ---
-                // When Hunting, set tunnel entrances to Walls (1). 
-                // When Wandering, set tunnel entrances to Empty (9).
-                const tunnelState = (aiMode === 'HUNT') ? 1 : 9;
-                
-                // Left Tunnel Entrance (Row 9, Col 0)
-                map[9][0] = tunnelState; 
-                // Right Tunnel Entrance (Row 9, Col 19)
-                map[9][COLS-1] = tunnelState;
-                // ------------------------
 
                 ghosts.forEach(g => {
                     const col = Math.floor(g.x / TILE_SIZE);
