@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧞</text></svg>">
+    <title>The Wish Game: Chameleon</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs (Imports for Module) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        // FIXED: Added signInWithCustomToken to imports
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- FIREBASE SETUP ---
+        // In the preview environment, these variables are provided globally.
+        // If running locally, you would replace these with your own config.
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'genie-chameleon-v1';
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global State
+        let currentUser = null;
+        let currentRoomId = null;
+        let unsubscribeRoom = null;
+        let localPlayerName = localStorage.getItem('genie_username') || "";
+        
+        // --- DOM ELEMENTS ---
+        const views = {
+            login: document.getElementById('view-login'),
+            lobby: document.getElementById('view-lobby'),
+            game: document.getElementById('view-game')
+        };
+        
+        // --- TOPIC CARDS DATA ---
+        const TOPICS = [
+            {
+                category: "Jobs",
+                grid: [
+                    ["Doctor", "Teacher", "Pilot", "Chef"],
+                    ["Artist", "Lawyer", "Engineer", "Nurse"],
+                    ["Actor", "Farmer", "Scientist", "Police"],
+                    ["Writer", "Driver", "Athlete", "Judge"]
+                ]
+            },
+            {
+                category: "Food",
+                grid: [
+                    ["Pizza", "Sushi", "Burger", "Taco"],
+                    ["Pasta", "Salad", "Steak", "Soup"],
+                    ["Curry", "Bread", "Cheese", "Cake"],
+                    ["Apple", "Fries", "Donut", "Pie"]
+                ]
+            },
+            {
+                category: "Animals",
+                grid: [
+                    ["Lion", "Tiger", "Bear", "Wolf"],
+                    ["Eagle", "Shark", "Whale", "Frog"],
+                    ["Snake", "Horse", "Panda", "Cat"],
+                    ["Dog", "Duck", "Goat", "Cow"]
+                ]
+            }
+        ];
+
+        // --- AUTH & INIT ---
+        async function initAuth() {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                 // Custom token login if available
+                 await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                if(localPlayerName) document.getElementById('inp-name').value = localPlayerName;
+                console.log("Logged in:", user.uid);
+            }
+        });
+        
+        initAuth();
+
+        // --- HELPER FUNCTIONS ---
+        function switchView(viewName) {
+            Object.values(views).forEach(el => el.style.display = 'none');
+            views[viewName].style.display = 'flex';
+        }
+
+        function getRoomRef(roomId) {
+            // Path structure: artifacts/{appId}/public/data/rooms/room_{roomId}
+            return doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
+        }
+
+        // --- GAME LOGIC ---
+
+        window.createRoom = async () => {
+            if (!currentUser) return alert("Waiting for connection...");
+            const name = document.getElementById('inp-name').value.trim();
+            if(!name) return alert("Enter a name");
+            localPlayerName = name;
+            localStorage.setItem('genie_username', name);
+
+            const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const roomRef = getRoomRef(roomId);
+
+            const initialData = {
+                roomId: roomId,
+                hostId: currentUser.uid,
+                status: 'LOBBY', // LOBBY, PLAYING, VOTING, REVEAL, GUESS, GAME_OVER
+                players: [{
+                    uid: currentUser.uid,
+                    name: name,
+                    score: 0,
+                    avatar: '🧞'
+                }],
+                turnIndex: 0,
+                clues: [],
+                votes: {},
+                topicIndex: 0,
+                secretCoord: {row:0, col:0}, // e.g. Row 2, Col 3
+                chameleonId: null,
+                winner: null,
+                lastUpdate: Date.now()
+            };
+
+            await setDoc(roomRef, initialData);
+            joinRoomLogic(roomId);
+        };
+
+        window.joinRoom = async () => {
+            if (!currentUser) return alert("Waiting for connection...");
+            const name = document.getElementById('inp-name').value.trim();
+            const roomId = document.getElementById('inp-room').value.trim().toUpperCase();
+            if(!name || !roomId) return alert("Enter name and room code");
+            localPlayerName = name;
+            localStorage.setItem('genie_username', name);
+
+            const roomRef = getRoomRef(roomId);
+            const docSnap = await getDoc(roomRef);
+
+            if (!docSnap.exists()) return alert("Room not found");
+
+            // Add player to array if not exists
+            const data = docSnap.data();
+            const playerExists = data.players.find(p => p.uid === currentUser.uid);
+
+            if (!playerExists) {
+                if(data.status !== 'LOBBY') return alert("Game already started");
+                await updateDoc(roomRef, {
+                    players: arrayUnion({
+                        uid: currentUser.uid,
+                        name: name,
+                        score: 0,
+                        avatar: '👤'
+                    })
+                });
+            }
+            joinRoomLogic(roomId);
+        };
+
+        function joinRoomLogic(roomId) {
+            currentRoomId = roomId;
+            switchView('lobby');
+            document.getElementById('lobby-code').innerText = roomId;
+
+            // Listen for updates
+            unsubscribeRoom = onSnapshot(getRoomRef(roomId), (doc) => {
+                if (doc.exists()) {
+                    renderGame(doc.data());
+                }
+            });
+        }
+
+        // --- RENDER FUNCTIONS ---
+        
+        function renderGame(state) {
+            // Check status to switch main views
+            if (state.status === 'LOBBY') {
+                switchView('lobby');
+                renderLobbyList(state);
+                // Show start button only to host
+                const isHost = state.hostId === currentUser.uid;
+                document.getElementById('btn-start-game').style.display = isHost ? 'block' : 'none';
+                document.getElementById('lobby-status').innerText = `Waiting for players... (${state.players.length})`;
+            } else {
+                switchView('game');
+                renderGameBoard(state);
+            }
+        }
+
+        function renderLobbyList(state) {
+            const list = document.getElementById('lobby-player-list');
+            list.innerHTML = '';
+            state.players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'player-pill';
+                div.innerHTML = `<span>${p.avatar}</span> ${p.name}`;
+                list.appendChild(div);
+            });
+        }
+
+        function renderGameBoard(state) {
+            const myPlayer = state.players.find(p => p.uid === currentUser.uid);
+            const isChameleon = state.chameleonId === currentUser.uid;
+            const currentTopic = TOPICS[state.topicIndex];
+            const secretWord = currentTopic.grid[state.secretCoord.row][state.secretCoord.col];
+
+            // 1. Update Header Info
+            document.getElementById('game-status-text').innerHTML = getStatusText(state, isChameleon);
+            
+            // 2. Render Topic Grid (The Board)
+            renderTopicGrid(currentTopic, state.secretCoord, isChameleon, state.status);
+
+            // 3. Render Secret Card (Bottom Left)
+            renderSecretCard(isChameleon, state.secretCoord);
+
+            // 4. Render Action Area (Clues / Voting / Guessing)
+            renderActionArea(state, myPlayer, isChameleon);
+
+            // 5. Render Players & Clues
+            renderPlayersAndClues(state);
+        }
+
+        function getStatusText(state, isChameleon) {
+            switch(state.status) {
+                case 'PLAYING': return `Current Turn: <span class="highlight">${state.players[state.turnIndex].name}</span>`;
+                case 'VOTING': return "Who is the Chameleon? Vote now!";
+                case 'REVEAL': return "The votes are in...";
+                case 'GUESS': return "Chameleon caught! They must guess the word.";
+                case 'GAME_OVER': return `Game Over! Winner: ${state.winner}`;
+                default: return "";
+            }
+        }
+
+        function renderTopicGrid(topic, secretCoord, isChameleon, status) {
+            const gridEl = document.getElementById('topic-grid');
+            gridEl.innerHTML = '';
+            document.getElementById('topic-title').innerText = topic.category;
+
+            // Coordinate labels (A1, A2...)
+            const rows = ["A", "B", "C", "D"];
+            const cols = ["1", "2", "3", "4"];
+
+            // Header row
+            gridEl.appendChild(createCell("")); // Corner
+            cols.forEach(c => gridEl.appendChild(createCell(c, "header")));
+
+            topic.grid.forEach((rowWords, rIndex) => {
+                // Row Label
+                gridEl.appendChild(createCell(rows[rIndex], "header"));
+                
+                rowWords.forEach((word, cIndex) => {
+                    const cell = createCell(word, "word");
+                    
+                    // Highlight logic
+                    const isSecret = (rIndex === secretCoord.row && cIndex === secretCoord.col);
+                    
+                    // Reveal to everyone at game over, or reveal to Civilians during game (conceptually they know the coord)
+                    // In this UI, we don't highlight the word for Civilians on the grid to keep it clean, 
+                    // they look at their code card.
+                    // BUT, if game is over, highlight it.
+                    if (status === 'GAME_OVER' || (status === 'GUESS' && !isChameleon)) {
+                        if (isSecret) cell.classList.add('secret-word');
+                    }
+                    gridEl.appendChild(cell);
+                });
+            });
+        }
+
+        function createCell(text, type) {
+            const div = document.createElement('div');
+            div.className = `grid-cell ${type || ''}`;
+            div.innerText = text;
+            return div;
+        }
+
+        function renderSecretCard(isChameleon, coord) {
+            const cardEl = document.getElementById('secret-card-content');
+            const rows = ["A", "B", "C", "D"];
+            const cols = ["1", "2", "3", "4"];
+            
+            if (isChameleon) {
+                cardEl.className = "secret-content chameleon-style";
+                cardEl.innerHTML = `
+                    <div class="role-icon">🧞</div>
+                    <h3>YOU ARE THE CHAMELEON</h3>
+                    <p>Blend in. Don't get caught.</p>
+                `;
+            } else {
+                cardEl.className = "secret-content civilian-style";
+                cardEl.innerHTML = `
+                    <div class="role-icon">🕵️</div>
+                    <h3>SECRET CODE</h3>
+                    <div class="code-coords">${rows[coord.row]}${cols[coord.col]}</div>
+                `;
+            }
+        }
+
+        function renderActionArea(state, myPlayer, isChameleon) {
+            const area = document.getElementById('action-area');
+            area.innerHTML = ''; // Clear
+
+            // CLUE PHASE
+            if (state.status === 'PLAYING') {
+                const isMyTurn = state.players[state.turnIndex].uid === myPlayer.uid;
+                
+                if (isMyTurn) {
+                    area.innerHTML = `
+                        <input type="text" id="inp-clue" maxlength="15" placeholder="Enter one word clue..." />
+                        <button onclick="submitClue()">Give Clue</button>
+                    `;
+                } else {
+                    area.innerHTML = `<p class="waiting-text">Waiting for ${state.players[state.turnIndex].name}...</p>`;
+                }
+            }
+            
+            // VOTING PHASE
+            else if (state.status === 'VOTING') {
+                const hasVoted = state.votes && state.votes[myPlayer.uid];
+                if (hasVoted) {
+                    area.innerHTML = `<p class="waiting-text">Waiting for others to vote...</p>`;
+                } else {
+                    area.innerHTML = `<p class="highlight">Click a player below to accuse them!</p>`;
+                }
+            }
+
+            // REVEAL PHASE
+            else if (state.status === 'REVEAL') {
+                // Host button to proceed? Or auto?
+                if (state.hostId === currentUser.uid) {
+                     area.innerHTML = `<button onclick="proceedFromReveal()">Next Phase</button>`;
+                }
+            }
+
+            // GUESS PHASE (Chameleon caught)
+            else if (state.status === 'GUESS') {
+                if (isChameleon) {
+                    area.innerHTML = `
+                        <p class="highlight">You were caught! Guess the secret word to win.</p>
+                        <input type="text" id="inp-guess" placeholder="Secret word..." />
+                        <button onclick="submitGuess()">Guess</button>
+                    `;
+                } else {
+                    area.innerHTML = `<p class="waiting-text">The Chameleon is guessing...</p>`;
+                }
+            }
+
+            // GAME OVER
+            else if (state.status === 'GAME_OVER') {
+                 if (state.hostId === currentUser.uid) {
+                     area.innerHTML = `<button onclick="startGame()">Start New Round</button>`;
+                }
+            }
+        }
+
+        function renderPlayersAndClues(state) {
+            const container = document.getElementById('players-container');
+            container.innerHTML = '';
+
+            state.players.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                if (state.status === 'PLAYING' && state.players[state.turnIndex].uid === p.uid) {
+                    card.classList.add('active-turn');
+                }
+
+                // Check for clue
+                const clueObj = state.clues.find(c => c.uid === p.uid);
+                const clueText = clueObj ? `"${clueObj.word}"` : '...';
+
+                // Voting logic
+                if (state.status === 'VOTING' && !state.votes[currentUser.uid]) {
+                    card.style.cursor = 'pointer';
+                    card.onclick = () => castVote(p.uid);
+                    card.classList.add('votable');
+                }
+
+                // Show votes received
+                let votesReceived = 0;
+                Object.values(state.votes || {}).forEach(votedId => {
+                    if (votedId === p.uid) votesReceived++;
+                });
+
+                // Identity reveal (at end)
+                let roleReveal = "";
+                if (state.status === 'GAME_OVER' || state.status === 'GUESS') {
+                    if (state.chameleonId === p.uid) roleReveal = `<div class="role-badge">🧞 Chameleon</div>`;
+                }
+
+                card.innerHTML = `
+                    <div class="p-avatar">${p.avatar}</div>
+                    <div class="p-info">
+                        <div class="p-name">${p.name} ${roleReveal}</div>
+                        <div class="p-clue">${clueText}</div>
+                    </div>
+                    ${state.status !== 'PLAYING' && votesReceived > 0 ? `<div class="vote-count">☝️ ${votesReceived}</div>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+
+        // --- ACTIONS ---
+
+        window.startGame = async () => {
+            const roomRef = getRoomRef(currentRoomId);
+            const docSnap = await getDoc(roomRef);
+            const data = docSnap.data();
+            
+            // 1. Pick Chameleon
+            const players = data.players;
+            const chameleon = players[Math.floor(Math.random() * players.length)];
+            
+            // 2. Pick Topic & Word
+            const tIndex = Math.floor(Math.random() * TOPICS.length);
+            const grid = TOPICS[tIndex].grid;
+            const r = Math.floor(Math.random() * 4);
+            const c = Math.floor(Math.random() * 4);
+
+            await updateDoc(roomRef, {
+                status: 'PLAYING',
+                chameleonId: chameleon.uid,
+                topicIndex: tIndex,
+                secretCoord: { row: r, col: c },
+                turnIndex: 0,
+                clues: [],
+                votes: {},
+                winner: null
+            });
+        };
+
+        window.submitClue = async () => {
+            const word = document.getElementById('inp-clue').value.trim();
+            if (!word) return;
+            
+            const roomRef = getRoomRef(currentRoomId);
+            const docSnap = await getDoc(roomRef);
+            const data = docSnap.data();
+
+            const newClues = [...data.clues, { uid: currentUser.uid, word: word }];
+            let nextTurn = data.turnIndex + 1;
+            let nextStatus = 'PLAYING';
+
+            // Check if everyone has gone
+            if (nextTurn >= data.players.length) {
+                nextStatus = 'VOTING';
+                nextTurn = 0;
+            }
+
+            await updateDoc(roomRef, {
+                clues: newClues,
+                turnIndex: nextTurn,
+                status: nextStatus
+            });
+        };
+
+        window.castVote = async (targetUid) => {
+            const roomRef = getRoomRef(currentRoomId);
+            const docSnap = await getDoc(roomRef);
+            const data = docSnap.data();
+
+            const newVotes = { ...data.votes, [currentUser.uid]: targetUid };
+
+            // Check if everyone voted
+            if (Object.keys(newVotes).length >= data.players.length) {
+                await updateDoc(roomRef, { votes: newVotes, status: 'REVEAL' });
+                // Auto calculate result after short delay handled by proceedFromReveal
+            } else {
+                await updateDoc(roomRef, { votes: newVotes });
+            }
+        };
+
+        window.proceedFromReveal = async () => {
+            const roomRef = getRoomRef(currentRoomId);
+            const docSnap = await getDoc(roomRef);
+            const data = docSnap.data();
+
+            // Count votes
+            const counts = {};
+            let maxVotes = 0;
+            let accusedId = null;
+
+            Object.values(data.votes).forEach(vid => {
+                counts[vid] = (counts[vid] || 0) + 1;
+                if (counts[vid] > maxVotes) {
+                    maxVotes = counts[vid];
+                    accusedId = vid;
+                }
+            });
+
+            // Logic: Tie? For simplicity, if tie, Chameleon escapes. Totally not because I don't feel like making it. 
+            // If Accused is Chameleon -> Go to GUESS phase
+            // If Accused is Civilian -> Chameleon Wins (GAME_OVER)
+
+            if (accusedId === data.chameleonId) {
+                await updateDoc(roomRef, { status: 'GUESS' });
+            } else {
+                await updateDoc(roomRef, { status: 'GAME_OVER', winner: 'Chameleon (Escaped!)' });
+            }
+        };
+
+        window.submitGuess = async () => {
+            const guess = document.getElementById('inp-guess').value.trim().toLowerCase();
+            const roomRef = getRoomRef(currentRoomId);
+            const docSnap = await getDoc(roomRef);
+            const data = docSnap.data();
+            
+            const currentTopic = TOPICS[data.topicIndex];
+            const secretWord = currentTopic.grid[data.secretCoord.row][data.secretCoord.col].toLowerCase();
+
+            let winner = "";
+            if (guess === secretWord) {
+                winner = "Chameleon (Guessed the word!)";
+            } else {
+                winner = "Civilians (Chameleon failed guess)";
+            }
+
+            await updateDoc(roomRef, { status: 'GAME_OVER', winner: winner });
+        };
+
+    </script>
+
+    <style>
+        /* --- THEME --- */
+        body {
+            background-color: #111827;
+            font-family: 'Inter', sans-serif;
+            color: #E0E7FF;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 { color: #a5b4fc; margin-bottom: 5px; text-align: center; }
+        .subtitle { color: #9CA3AF; margin-bottom: 20px; text-align: center; font-size: 0.9rem; }
+
+        /* Views */
+        .view-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Inputs & Buttons */
+        input {
+            background: #1F2937; border: 1px solid #4F46E5; color: white;
+            padding: 12px; border-radius: 8px; font-size: 1rem; margin-bottom: 10px; width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4F46E5; color: white; border: none; padding: 12px 24px;
+            border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer;
+            width: 100%; transition: 0.2s;
+        }
+        button:hover { background: #6366F1; transform: translateY(-1px); }
+
+        /* Login / Lobby */
+        .card {
+            background: rgba(31, 41, 55, 0.7);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            padding: 30px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .lobby-code { font-size: 3rem; letter-spacing: 5px; color: #FBBF24; margin: 10px 0; font-weight: 800; }
+        .player-list { width: 100%; margin: 20px 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .player-pill { background: #374151; padding: 8px 16px; border-radius: 20px; display: flex; align-items: center; gap: 8px; }
+
+        /* Game Board Layout */
+        #view-game { width: 100%; max-width: 800px; }
+        .game-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            width: 100%;
+        }
+        @media (max-width: 700px) { .game-layout { grid-template-columns: 1fr; } }
+
+        /* Topic Grid */
+        .topic-card {
+            background: #1F2937; border: 2px solid #374151; border-radius: 12px; padding: 15px;
+        }
+        .topic-title { text-align: center; color: #FBBF24; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; font-weight: 800; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 30px repeat(4, 1fr);
+            gap: 4px;
+        }
+        .grid-cell {
+            background: #111827; padding: 8px 4px; text-align: center; font-size: 0.85rem;
+            display: flex; align-items: center; justify-content: center; border-radius: 4px;
+        }
+        .grid-cell.header { color: #6366F1; font-weight: bold; background: transparent; }
+        .grid-cell.word { border: 1px solid #374151; }
+        .secret-word { background: #FBBF24; color: black; font-weight: bold; animation: pulse 2s infinite; }
+
+        /* Secret Code Card */
+        .secret-card-container {
+            margin-top: 20px;
+        }
+        .secret-content {
+            padding: 20px; border-radius: 12px; text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative; overflow: hidden;
+        }
+        .civilian-style { background: linear-gradient(135deg, #1e3a8a, #1e40af); }
+        .chameleon-style { background: linear-gradient(135deg, #7c3aed, #4c1d95); }
+        .role-icon { font-size: 2.5rem; margin-bottom: 5px; }
+        .code-coords { font-size: 3.5rem; font-weight: 800; color: white; letter-spacing: -2px; line-height: 1; }
+        
+        /* Action Area */
+        .action-area {
+            grid-column: 1 / -1;
+            background: #374151; padding: 15px; border-radius: 12px;
+            text-align: center; min-height: 80px; display: flex; flex-direction: column; justify-content: center;
+            border: 1px solid #4F46E5;
+        }
+        .highlight { color: #FBBF24; font-weight: bold; }
+        .waiting-text { color: #9CA3AF; font-style: italic; margin: 0; }
+
+        /* Players List */
+        .players-container {
+            grid-column: 1 / -1;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+        }
+        .player-card {
+            background: #1F2937; padding: 10px; border-radius: 8px; border: 1px solid #374151;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            transition: 0.2s;
+        }
+        .active-turn { border-color: #FBBF24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
+        .votable:hover { border-color: #ef4444; background: #3f1919; transform: scale(1.05); }
+        .p-avatar { font-size: 1.5rem; }
+        .p-name { font-weight: bold; font-size: 0.9rem; margin: 4px 0; }
+        .p-clue { color: #a5b4fc; font-style: italic; font-size: 0.9rem; min-height: 1.2em; }
+        .vote-count { background: #ef4444; color: white; font-size: 0.8rem; padding: 2px 8px; border-radius: 10px; margin-top: 5px; }
+        .role-badge { background: #FBBF24; color: black; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 2px;}
+
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
+
+        .return-link { margin-top: 40px; color: #6366F1; text-decoration: none; }
+        .return-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <!-- VIEW: LOGIN -->
+    <div id="view-login" class="view-container" style="display: flex;">
+        <h1>🧞 The Chameleon</h1>
+        <p class="subtitle">Blend in. Don't get caught.</p>
+        <div class="card">
+            <input type="text" id="inp-name" placeholder="Your Name" maxlength="12">
+            
+            <div style="width:100%; margin-top: 20px; border-top: 1px solid #374151; padding-top:20px;">
+                <button onclick="createRoom()">Create New Room</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; width:100%; margin-top: 10px;">
+                <input type="text" id="inp-room" placeholder="Room Code" style="margin:0; text-transform:uppercase;">
+                <button onclick="joinRoom()" style="width: auto;">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW: LOBBY -->
+    <div id="view-lobby" class="view-container">
+        <h1>Lobby</h1>
+        <div class="card">
+            <p style="margin:0; color:#9CA3AF;">Room Code</p>
+            <div id="lobby-code" class="lobby-code">ABCD</div>
+            <div id="lobby-status" style="margin-bottom: 20px; color: #FBBF24;">Waiting...</div>
+            
+            <div id="lobby-player-list" class="player-list">
+                <!-- Players injected here -->
+            </div>
+
+            <button id="btn-start-game" onclick="startGame()" style="display:none; margin-top: 20px;">Start Game</button>
+            <p style="font-size:0.8rem; color:#6B7280; margin-top: 20px;">Share the Room Code with friends to join.</p>
+        </div>
+    </div>
+
+    <!-- VIEW: GAME -->
+    <div id="view-game" class="view-container">
+        <h2 id="game-status-text" style="text-align: center; margin-bottom: 10px; font-size: 1.1rem; color: #E0E7FF;"></h2>
+        
+        <div class="game-layout">
+            <!-- Left Column: Board -->
+            <div class="topic-card">
+                <div id="topic-title" class="topic-title">TOPIC</div>
+                <div id="topic-grid" class="grid-container">
+                    <!-- Grid injected here -->
+                </div>
+            </div>
+
+            <!-- Right Column: Secret Info -->
+            <div class="secret-card-container">
+                <div id="secret-card-content" class="secret-content civilian-style">
+                    <!-- Injected -->
+                </div>
+            </div>
+
+            <!-- Full Width: Actions -->
+            <div id="action-area" class="action-area">
+                <!-- Inputs/Buttons injected here -->
+            </div>
+
+            <!-- Full Width: Players -->
+            <div id="players-container" class="players-container">
+                <!-- Player cards -->
+            </div>
+        </div>
+    </div>
+
+    <a href="https://geniewishgame.github.io" class="return-link">&larr; Return to Main Menu</a>
+
+</body>
+</html>
