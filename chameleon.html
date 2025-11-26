@@ -12,19 +12,43 @@
     <!-- Firebase SDKs (Imports for Module) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        // FIXED: Added signInWithCustomToken to imports
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- FIREBASE SETUP ---
-        // In the preview environment, these variables are provided globally.
-        // If running locally, you would replace these with your own config.
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'genie-chameleon-v1';
         
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        let firebaseConfig;
+        let appId = 'genie-chameleon-v1';
+
+        // CHECK: Are we in the Preview Environment?
+        if (typeof __firebase_config !== 'undefined') {
+            // Use Preview Environment Config
+            firebaseConfig = JSON.parse(__firebase_config);
+            if (typeof __app_id !== 'undefined') appId = __app_id;
+        } else {
+
+            
+            firebaseConfig = {
+                apiKey: "PASTE_YOUR_API_KEY_HERE",
+                authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
+                messagingSenderId: "YOUR_SENDER_ID",
+                appId: "YOUR_APP_ID"
+            };
+        }
+
+        // Initialize Firebase
+        // Guard to prevent crashing if config isn't pasted yet on GitHub Pages
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase Initialization Error. Did you paste your config?", e);
+            document.body.innerHTML = `<div style="color:white; text-align:center; padding:50px;"><h1>Configuration Error</h1><p>Please edit the HTML file and paste your Firebase Config keys in the script section to play on GitHub Pages.</p></div>`;
+        }
 
         // Global State
         let currentUser = null;
@@ -67,28 +91,45 @@
                     ["Snake", "Horse", "Panda", "Cat"],
                     ["Dog", "Duck", "Goat", "Cow"]
                 ]
+            },
+            {
+                category: "Countries",
+                grid: [
+                    ["Brazil", "Japan", "Egypt", "France"],
+                    ["Canada", "Italy", "India", "Peru"],
+                    ["China", "Mexico", "Spain", "Kenya"],
+                    ["Russia", "Germany", "Chile", "Iran"]
+                ]
             }
         ];
 
         // --- AUTH & INIT ---
         async function initAuth() {
+            if (!auth) return; // Guard if init failed
+
+            // 1. Try Custom Token (Preview Environment)
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                 // Custom token login if available
                  await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+            } 
+            // 2. Fallback to Anonymous Auth (GitHub Pages / Local)
+            else {
+                await signInAnonymously(auth).catch(err => {
+                    console.error("Auth Error:", err);
+                    alert("Authentication failed. Make sure 'Anonymous' auth is enabled in Firebase Console.");
+                });
             }
         }
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                if(localPlayerName) document.getElementById('inp-name').value = localPlayerName;
-                console.log("Logged in:", user.uid);
-            }
-        });
-        
-        initAuth();
+        if (auth) {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    if(localPlayerName) document.getElementById('inp-name').value = localPlayerName;
+                    console.log("Logged in:", user.uid);
+                }
+            });
+            initAuth();
+        }
 
         // --- HELPER FUNCTIONS ---
         function switchView(viewName) {
@@ -498,7 +539,7 @@
                 }
             });
 
-            // Logic: Tie? For simplicity, if tie, Chameleon escapes. Totally not because I don't feel like making it. 
+            // Logic: Tie? For simplicity, if tie, Chameleon escapes.
             // If Accused is Chameleon -> Go to GUESS phase
             // If Accused is Civilian -> Chameleon Wins (GAME_OVER)
 
